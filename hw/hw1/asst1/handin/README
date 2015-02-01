@@ -1,8 +1,0 @@
-I finished all extra points questions. Each one is in a separate tar file. 
-
-prog2.cpp              main.cpp in program 2
-prog2_extra.tar.gz     vectorized version of arraySumSerial
-prog4_extra.tar.gz     AVX intrinsics implementation of sqrt
-prog5_extra.tar.gz     Improve performance of saxpy
-writeup.pdf            My report for this assignment, including extra point questions. 
-
