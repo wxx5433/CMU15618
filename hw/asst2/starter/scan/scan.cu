@@ -48,6 +48,28 @@ __global__ void downSweep(int* device_result, int length, int twod, int twod1) {
     device_result[index + twod1 - 1] += tmp;
 }
 
+__global__ void findPosition(int* device_input, int* device_output, int length) {
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index + 1 >= length) {
+        return;
+    }
+    if (device_input[index] == device_input[index + 1]) {
+        device_output[index] = 1;
+    } else {
+        device_output[index] = 0;
+    }
+}
+
+__global__ void setIndex(int* input, int* device_output, int length) {
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index + 1 >= length) {
+        return;
+    }
+    if (input[index] < input[index + 1]) {
+        device_output[input[index]] = index;
+    }
+}
+
 void exclusive_scan(int* device_start, int length, int* device_result)
 {
     /* Fill in this function with your exclusive scan implementation.
@@ -68,7 +90,6 @@ void exclusive_scan(int* device_start, int length, int* device_result)
         int blocksPerGrid 
             = (roundUpLength/twod1 + threadsPerBlock - 1) / threadsPerBlock;
         upSweep<<<blocksPerGrid, threadsPerBlock>>>(device_result, roundUpLength, twod, twod1);
-        cudaDeviceSynchronize();
     }
 
     // set last element to zero
@@ -81,7 +102,6 @@ void exclusive_scan(int* device_start, int length, int* device_result)
         int blocksPerGrid 
             = (roundUpLength/twod1 + threadsPerBlock - 1) / threadsPerBlock;
         downSweep<<<blocksPerGrid, threadsPerBlock>>>(device_result, roundUpLength, twod, twod1);
-        cudaDeviceSynchronize();
     }
 }
 
@@ -172,7 +192,26 @@ int find_repeats(int *device_input, int length, int *device_output) {
      * it requires that. However, you must ensure that the results of
      * find_repeats are correct given the original length.
      */    
-    return 0;
+    const int threadsPerBlock = 256;
+    const int blocksPerGrid = (length + threadsPerBlock - 1) / threadsPerBlock;
+    int roundUpLength = nextPow2(length);
+    int size = roundUpLength * sizeof(int);
+    // copy device_input to tmp array
+    int* tmp;
+    cudaMalloc((void**)&tmp, size);
+    cudaMemcpy(&tmp, &device_input, size, cudaMemcpyDeviceToDevice);
+    // set all tmp[i] to 1 if input[i]==input[i+1]
+    findPosition<<<blocksPerGrid, threadsPerBlock>>>(device_input, tmp, length);
+    // prefix sum
+    exclusive_scan(tmp, length, tmp);
+    // get the number of elements that follows input[i]==input[i+1]
+    int result = 0;
+    cudaMemcpy(&result, &tmp[length - 1], sizeof(int), cudaMemcpyDeviceToHost);
+    // put the indice i where input[i]==input[i+1] to device_output
+    setIndex<<<blocksPerGrid, threadsPerBlock>>>(tmp, device_output, length);
+    cudaDeviceSynchronize();
+    printf("result: %d\n", result);
+    return result;
 }
 
 /* Timing wrapper around find_repeats. You should not modify this function.
