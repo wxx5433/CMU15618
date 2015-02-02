@@ -105,6 +105,7 @@ int main(int argc, char** argv)
             break;
         case 't':
             useThrust = true;
+            break;
         case '?':
         default:
             usage(argv[0]);
@@ -117,7 +118,7 @@ int main(int argc, char** argv)
     int* resultarray = new int[N];
     int* checkarray = new int[N];
 
-    if (test.compare("random") == 0) {
+    if (input.compare("random") == 0) {
 
         srand(time(NULL));
 

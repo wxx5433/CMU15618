@@ -11,6 +11,8 @@
 
 #include "CycleTimer.h"
 
+//#define DEBUG
+
 extern float toBW(int bytes, float sec);
 
 
@@ -28,6 +30,24 @@ static inline int nextPow2(int n)
     return n;
 }
 
+__global__ void upSweep(int* device_result, int length, int twod, int twod1) {
+    int index = (blockIdx.x * blockDim.x + threadIdx.x) * twod1;
+    if ((index + twod1 - 1) >= length) {  // check boundary
+        return;
+    }
+    device_result[index + twod1 - 1] += device_result[index + twod - 1];
+}
+
+__global__ void downSweep(int* device_result, int length, int twod, int twod1) {
+    int index = (blockIdx.x * blockDim.x + threadIdx.x) * twod1;
+    if ((index + twod1 - 1) >= length) {  // check boudnary
+        return;
+    }
+    int tmp = device_result[index + twod - 1];
+    device_result[index + twod - 1] = device_result[index + twod1 - 1];
+    device_result[index + twod1 - 1] += tmp;
+}
+
 void exclusive_scan(int* device_start, int length, int* device_result)
 {
     /* Fill in this function with your exclusive scan implementation.
@@ -39,6 +59,30 @@ void exclusive_scan(int* device_start, int length, int* device_result)
      * both the input and the output arrays are sized to accommodate the next
      * power of 2 larger than the input.
      */
+    const int roundUpLength = nextPow2(length);
+    int threadsPerBlock = 256;
+    
+    // upsweep phase
+    for (int twod = 1; twod < roundUpLength; twod *= 2) {
+        int twod1 = twod * 2;
+        int blocksPerGrid 
+            = (roundUpLength/twod1 + threadsPerBlock - 1) / threadsPerBlock;
+        upSweep<<<blocksPerGrid, threadsPerBlock>>>(device_result, roundUpLength, twod, twod1);
+        cudaDeviceSynchronize();
+    }
+
+    // set last element to zero
+    int zero = 0;
+    cudaMemcpy(&device_result[roundUpLength - 1], &zero, sizeof(int), cudaMemcpyHostToDevice);
+
+    // downsweep phase
+    for (int twod = roundUpLength / 2; twod >= 1; twod /= 2) {
+        int twod1 = twod * 2;
+        int blocksPerGrid 
+            = (roundUpLength/twod1 + threadsPerBlock - 1) / threadsPerBlock;
+        downSweep<<<blocksPerGrid, threadsPerBlock>>>(device_result, roundUpLength, twod, twod1);
+        cudaDeviceSynchronize();
+    }
 }
 
 /* This function is a wrapper around the code you will write - it copies the
@@ -80,6 +124,9 @@ double cudaScan(int* inarray, int* end, int* resultarray)
     
     cudaMemcpy(resultarray, device_result, (end - inarray) * sizeof(int),
                cudaMemcpyDeviceToHost);
+    // free device memory
+    cudaFree(device_result);
+    cudaFree(device_input);
     return overallDuration;
 }
 
