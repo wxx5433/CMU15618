@@ -1,3 +1,2 @@
-*.log
-*.o
-
+starter/scan/logs/*
+starter/scan/objs/*
