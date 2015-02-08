@@ -32,6 +32,13 @@ struct GlobalConstants {
     float* imageData;
 };
 
+// helping structure to store circle in order to put into shared memory
+struct SharedCircles {
+    float3 position;
+    float radius;
+    float3 color;
+};
+
 // Global variable that is in scope, but read-only, for all cuda
 // kernels.  The __constant__ modifier designates this variable will
 // be stored in special "constant" memory on the GPU. (we didn't talk
@@ -426,6 +433,47 @@ __global__ void kernelRenderCircles() {
     }
 }
 
+
+/****************** My code to render by cells ********************/
+// myKernelRenderCells-- (CUDA device code)
+//
+// Each thread renders a cell. Loop through all circles to decide 
+// if it makes a contribution to the cell. 
+// Note: This method may be inefficient when the number of cells
+//       far less than the number of circles.  
+__global__ void myKernelRenderCells() {
+
+    // TODO: can add circles to share memory
+    int imageX = blockIdx.x * blockDim.x + threadIdx.x;
+    int imageY = blockIdx.y * blockDim.y + threadIdx.y;
+
+    int width = cuConstRendererParams.imageWidth;
+    int height = cuConstRendererParams.imageHeight;
+
+    // check boundary
+    if (imageX >= width || imageY >= height) {
+        return;
+    }
+
+    float invWidth = 1.f / width;
+    float invHeight = 1.f / height;
+
+    float2 pixelCenterNorm = make_float2(
+        invWidth * (static_cast<float>(imageX) + 0.5f),
+        invHeight * (static_cast<float>(imageY) + 0.5f));
+    int offset = 4 * (imageY * width + imageX);
+    float4* imgPtr = (float4*)(&cuConstRendererParams.imageData[offset]);
+    
+    // loop through all circles
+    int circleNum = cuConstRendererParams.numCircles;
+    for (int circleIndex = 0; circleIndex < circleNum; ++circleIndex) {
+        int index3 = circleIndex * 3;
+        float3 p = *(float3*)(&cuConstRendererParams.position[index3]);
+        shadePixel(circleIndex, pixelCenterNorm, p, imgPtr);
+    }
+}
+/******************* End of my code to render by cells ********************/
+
 ////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -633,9 +681,25 @@ void
 CudaRenderer::render() {
 
     // 256 threads per block is a healthy number
+    /*
     dim3 blockDim(256, 1);
     dim3 gridDim((numCircles + blockDim.x - 1) / blockDim.x);
-
     kernelRenderCircles<<<gridDim, blockDim>>>();
+    */
+    // create threads acoording to cells
+    dim3 blockDim(16, 16, 1);
+    dim3 gridDim(
+        (image->width + blockDim.x - 1) / blockDim.x, 
+        (image->height + blockDim.y - 1) / blockDim.y);
+
+    myKernelRenderCells<<<gridDim, blockDim>>>();
     cudaThreadSynchronize();
+    cudaError_t errSync= cudaGetLastError();
+    cudaError_t errAsync= cudaDeviceSynchronize();
+    if (errSync != cudaSuccess) {
+        printf("Sync error: %s\n", cudaGetErrorString(errSync));
+    }
+    if (errAsync != cudaSuccess) {
+        printf("Async error: %s\n", cudaGetErrorString(errAsync));
+    }
 }
