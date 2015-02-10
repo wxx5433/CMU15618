@@ -22,6 +22,7 @@ RefRenderer::RefRenderer() {
 RefRenderer::~RefRenderer() {
 
     if (image) {
+        delete image->data;   // delete data first!
         delete image;
     }
 

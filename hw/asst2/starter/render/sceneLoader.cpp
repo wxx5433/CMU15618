@@ -212,7 +212,7 @@ loadCircleScene(
     }else if (sceneName == BOUNCING_BALLS) {
         srand(0);
         numCircles = 10;   
-        position = new float[3 * numCircles]; 
+//        position = new float[3 * numCircles]; 
         position = new float[3 * numCircles];
         velocity = new float[3 * numCircles];  
         color = new float[3 * numCircles]; 

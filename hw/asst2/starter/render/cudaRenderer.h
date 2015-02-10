@@ -7,7 +7,6 @@
 
 #include "circleRenderer.h"
 
-
 class CudaRenderer : public CircleRenderer {
 
 private:
@@ -21,6 +20,8 @@ private:
     float* color;
     float* radius;
 
+    int* cudaDeviceCirclesInBox;
+    int* cudaDeviceBoxCirclesCount;
     float* cudaDevicePosition;
     float* cudaDeviceVelocity;
     float* cudaDeviceColor;
