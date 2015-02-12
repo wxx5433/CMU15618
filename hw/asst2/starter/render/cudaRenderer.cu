@@ -15,8 +15,11 @@
 #include "noise.h"
 #include "sceneLoader.h"
 #include "util.h"
+#include "cycleTimer.h"
 
 #include "circleBoxTest.cu_inl"
+
+//#define DEBUG
 
 ////////////////////////////////////////////////////////////////////////////////////////
 // Putting all the cuda kernels here
@@ -38,9 +41,6 @@ struct GlobalConstants {
     int imageWidth;
     int imageHeight;
     float* imageData;
-
-    int* circlesInBox;
-    int* circlesCount;
 };
 
 // Global variable that is in scope, but read-only, for all cuda
@@ -443,18 +443,13 @@ __global__ void kernelRenderCircles(int*& pixelIndex, int*& circleIndex) {
 // pixel from the circle.  Update of the image is done in this
 // function.  Called by kernelRenderCircles()
 __device__ __inline__ void
-myShadePixel(int circleIndex, float2 pixelCenter, float3 p, float4* imagePtr, int*& pixelIndex, int*& circleIndexes) {
+myShadePixel(int circleIndex, float2 pixelCenter, float3 p, float4* imagePtr) {
 
     float diffX = p.x - pixelCenter.x;
     float diffY = p.y - pixelCenter.y;
     float pixelDist = diffX * diffX + diffY * diffY;
 
     float rad = cuConstRendererParams.radius[circleIndex];;
-    float maxDist = rad * rad;
-
-    // circle does not contribute to the image
-    if (pixelDist > maxDist)
-        return;
 
     float3 rgb;
     float alpha;
@@ -504,7 +499,17 @@ myShadePixel(int circleIndex, float2 pixelCenter, float3 p, float4* imagePtr, in
     // END SHOULD-BE-ATOMIC REGION
 }
 
-__global__ void myBinKernelRenderCircles(int* binPixelIndex, int* binCircleIndex, int* begin, int* end, int pixelNum) {
+#ifdef SOLUTION2
+/************* solution 2: render by circles and sort ****************/
+__global__ void kernelInitValue(int* binPixelIndex, int initVal, int size) { 
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index >= size) {
+        return;
+    }
+    binPixelIndex[index] = initVal;
+}
+
+__global__ void myBinKernelRenderCircles(int* binCircleIndex, int* begin, int* end, int pixelNum) {
     int imageX = blockIdx.x * blockDim.x + threadIdx.x;
     int imageY = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -528,10 +533,18 @@ __global__ void myBinKernelRenderCircles(int* binPixelIndex, int* binCircleIndex
     int b = begin[pixelIndex];
     int e = end[pixelIndex];
 
-    for (int index = b; index <= e; ++index) {
+    if (b == e) {
+        return;
+    }
+
+    //printf("%d\t%d\n", b, e);
+
+    for (int i = b; i < e; ++i) {
+        int index = binCircleIndex[i];
+//        printf("%d\n", index);
         int index3 = 3 * index;
         float3 p = *(float3*)(&cuConstRendererParams.position[index3]);
-        shadePixel(index, pixelCenterNorm, p, imgPtr);
+        myShadePixel(index, pixelCenterNorm, p, imgPtr);
     }
 }
 
@@ -540,12 +553,17 @@ __global__ void kernelFindBeginAndEnd(int* binPixelIndex, int* begin, int* end, 
     if (index >= totalSize || binPixelIndex[index] == pixelNum) {
         return;
     }
-    int pixelIndex = index / pixelNum;
-    if (index == 0 || binPixelIndex[index] != binPixelIndex[index - 1]) {
+    int pixelIndex = binPixelIndex[index];
+    if (index == 0 || pixelIndex != binPixelIndex[index - 1]) {
         begin[pixelIndex] = index;
+#ifdef DEBUG
+        if (index % 768 == 0) {
+            printf("%d\t%d\n", index, pixelIndex);
+        }
+#endif
     }
-    if (index == totalSize - 1 || binPixelIndex[index] != binPixelIndex[index + 1]) {
-        end[pixelIndex] = index;
+    if (index == totalSize - 1 || pixelIndex != binPixelIndex[index + 1]) { 
+        end[pixelIndex] = index + 1;
     }
 }
 
@@ -594,14 +612,18 @@ __global__ void kernelFindBin(int* binPixelIndex, int* binCircleIndex) {
             float maxDist = rad * rad;
             if (pixelDist <= maxDist) {
                 binCircleIndex[binIndex] = index;
-                binPixelIndex[binIndex++] = pixelY * imageWidth + pixelX;
+                int pixelIndex = pixelY * imageWidth + pixelX;
+                binPixelIndex[binIndex++] = pixelIndex;
             }
             imgPtr++;
         }
     }
 }
+/********************* end of solution 2 ***************************/
+#endif
 
-/****************** My code to render by cells ********************/
+#ifdef SOLUTION1
+/************** Soluton 1: render by cells ********************/
 // myKernelRenderCells-- (CUDA device code)
 //
 // Each thread renders a cell. Loop through all circles to decide 
@@ -609,8 +631,6 @@ __global__ void kernelFindBin(int* binPixelIndex, int* binCircleIndex) {
 // Note: This method may be inefficient when the number of cells
 //       far less than the number of circles.  
 __global__ void myKernelRenderCells() {
-
-    // TODO: can add circles to share memory
     int imageX = blockIdx.x * blockDim.x + threadIdx.x;
     int imageY = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -639,9 +659,11 @@ __global__ void myKernelRenderCells() {
         shadePixel(circleIndex, pixelCenterNorm, p, imgPtr);
     }
 }
-/******************* End of my code to render by cells ********************/
+/**************** End of code solution 1: render by cells ******************/
+#endif
 
-/******************** my code to render by blocks ***************************/
+#ifdef SOLUTION3
+/************** solution 3: render by blocks(bloom filter) ****************/
 __global__ void getCirclesInBox(int* cudaDeviceCirclesInBox, int* cudaDeviceBoxCirclesCount, 
     int boxNum_x, int boxNum_y) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -718,11 +740,10 @@ __global__ void kernelRenderCirclesByBox(int* cudaDeviceCirclesInBox, int* cudaD
         shadePixel(index, pixelCenterNorm, p, imgPtr);
     }
 }
-    
-/********************* End of my code to render by box ******************/
+/********************* End of solution 3: render by box ******************/
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////
-
 
 CudaRenderer::CudaRenderer() {
     image = NULL;
@@ -733,8 +754,17 @@ CudaRenderer::CudaRenderer() {
     color = NULL;
     radius = NULL;
 
+#ifdef SOLUTION3
     cudaDeviceCirclesInBox = NULL;
     cudaDeviceBoxCirclesCount = NULL;
+#endif
+
+#ifdef SOLUTION2
+    binPixelIndex = NULL;
+    binCircleIndex = NULL;
+    begin = NULL;
+    end = NULL;
+#endif
     cudaDevicePosition = NULL;
     cudaDeviceVelocity = NULL;
     cudaDeviceColor = NULL;
@@ -758,8 +788,17 @@ CudaRenderer::~CudaRenderer() {
 
     if (cudaDevicePosition) {
         printf("free space!\n");
+#ifdef SOLUTION3
         cudaFree(cudaDeviceCirclesInBox);
         cudaFree(cudaDeviceBoxCirclesCount);
+#endif
+
+#ifdef SOLUTION2
+        cudaFree(binPixelIndex);
+        cudaFree(binCircleIndex);
+        cudaFree(begin);
+        cudaFree(end);
+#endif
         cudaFree(cudaDevicePosition);
         cudaFree(cudaDeviceVelocity);
         cudaFree(cudaDeviceColor);
@@ -820,11 +859,32 @@ CudaRenderer::setup() {
     // See the CUDA Programmer's Guide for descriptions of
     // cudaMalloc and cudaMemcpy
 
+
+#ifdef SOLUTION3
     short boxNum_x = (image->width + BOX_SIZE - 1) / BOX_SIZE;
     short boxNum_y = (image->height + BOX_SIZE - 1) / BOX_SIZE;
-
     cudaMalloc(&cudaDeviceCirclesInBox, sizeof(int) * numCircles * boxNum_x * boxNum_y);
     cudaMalloc(&cudaDeviceBoxCirclesCount, sizeof(int) * boxNum_x * boxNum_y);
+#endif
+
+#ifdef SOLUTION2
+    int totalPixelNum = image->width * image->height;
+    int totalSize = numCircles * totalPixelNum;
+    cudaMalloc(&binPixelIndex, sizeof(int) * totalSize);
+    cudaMalloc(&binCircleIndex, sizeof(int) * totalSize);
+    cudaMalloc(&begin, sizeof(int) * totalPixelNum);
+    cudaMalloc(&end, sizeof(int) * totalPixelNum);
+    // initialize to max, so that after sorting it appears at last
+    dim3 blockDim1(256, 1);
+    dim3 gridDim1((totalSize + blockDim1.x - 1) / blockDim1.x);
+    kernelInitValue<<<gridDim1, blockDim1>>>(binPixelIndex, totalPixelNum, totalSize);
+    // find the start and end index of each bin
+    dim3 blockDim2(256, 1);
+    dim3 gridDim2((totalPixelNum + blockDim2.x - 1) / blockDim2.x);
+    kernelInitValue<<<gridDim2, blockDim2>>>(begin, -1, totalPixelNum);
+    kernelInitValue<<<gridDim2, blockDim2>>>(end, -1, totalPixelNum);
+#endif
+
     cudaMalloc(&cudaDevicePosition, sizeof(float) * 3 * numCircles);
     cudaMalloc(&cudaDeviceVelocity, sizeof(float) * 3 * numCircles);
     cudaMalloc(&cudaDeviceColor, sizeof(float) * 3 * numCircles);
@@ -942,9 +1002,7 @@ CudaRenderer::advanceAnimation() {
 
 void
 CudaRenderer::render() {
-
-    
-    /*
+#ifdef SOLUTION1
     // solution 1: create threads acoording to cells, get 21/65
     dim3 blockDim(16, 16, 1);
     dim3 gridDim(
@@ -953,10 +1011,53 @@ CudaRenderer::render() {
 
     myKernelRenderCells<<<gridDim, blockDim>>>();
     cudaThreadSynchronize();
-    */
-    
+#endif
 
-    // solution 2: bloom filter, get 65/65
+#ifdef SOLUTION2
+    // solution 2: data-parallel approach, get 2/65, out of memory
+    int totalPixelNum = image->width * image->height;
+    int totalSize = numCircles * totalPixelNum;
+
+    // put all pixel into circle bins
+    double startTime = CycleTimer::currentSeconds();
+    dim3 blockDim1(256, 1);
+    dim3 gridDim1((numCircles + blockDim1.x - 1) / blockDim1.x);
+    kernelFindBin<<<gridDim1, blockDim1>>>(binPixelIndex, binCircleIndex);   
+    cudaDeviceSynchronize();
+    double endTime = CycleTimer::currentSeconds();
+    printf("time to put into bin: %.4f ms\n", 1000 * (endTime - startTime));
+
+    // sort bins by pixel index
+    // must wrap device memory with device_ptr
+    startTime = CycleTimer::currentSeconds();
+    thrust::device_ptr<int> dev_binPixelIndex(binPixelIndex);
+    thrust::device_ptr<int> dev_binCircleIndex(binCircleIndex);
+    thrust::stable_sort_by_key(dev_binPixelIndex, dev_binPixelIndex + totalSize, dev_binCircleIndex);
+    endTime = CycleTimer::currentSeconds();
+    printf("time to sort: %.4f ms\n", 1000 * (endTime - startTime));
+
+    startTime = CycleTimer::currentSeconds();
+    dim3 blockDim2(256, 1);
+    dim3 gridDim2((totalSize + blockDim2.x - 1) / blockDim2.x);
+    kernelFindBeginAndEnd<<<gridDim2, blockDim2>>>(binPixelIndex, 
+        begin, end, totalSize, totalPixelNum);
+    cudaDeviceSynchronize();
+    endTime = CycleTimer::currentSeconds();
+    printf("time to find begin and end: %.4f ms\n", 1000 * (endTime - startTime));
+
+    // render every pixel
+    startTime = CycleTimer::currentSeconds();
+    dim3 blockDim3(16, 16, 1);
+    dim3 gridDim3((image->width + blockDim3.x - 1) / blockDim3.x,
+                    (image->height + blockDim3.y - 1) / blockDim3.y);
+    myBinKernelRenderCircles<<<gridDim3, blockDim3>>>(binCircleIndex, begin, end, totalPixelNum);
+    cudaDeviceSynchronize();
+    endTime = CycleTimer::currentSeconds();
+    printf("time to render by pixel: %.4f ms\n", 1000 * (endTime - startTime));
+#endif 
+
+    // solution 3: bloom filter, get 65/65
+#ifdef SOLUTION3
     short boxNum_x = (image->width + BOX_SIZE - 1) / BOX_SIZE;
     short boxNum_y = (image->height + BOX_SIZE - 1) / BOX_SIZE;
     dim3 blockDim(8, 8);
@@ -976,68 +1077,5 @@ CudaRenderer::render() {
     if (cudaerr != cudaSuccess) {
         printf("cada failed: %s\n", cudaGetErrorString(cudaerr));
     }
-
-/*
-    // solution 3: data-parallel approach
-    dim3 blockDim(256, 1);
-    dim3 gridDim((numCircles + blockDim.x - 1) / blockDim.x);
-
-    int totalPixelNum = image->width * image->height;
-    int totalSize = numCircles * totalPixelNum;
-    printf("totalSize: %d\n", totalSize);
-    int* binPixelIndex;
-    int* binCircleIndex;
-
-    cudaMalloc(&binPixelIndex, sizeof(int) * totalSize);
-    cudaMalloc(&binCircleIndex, sizeof(int) * totalSize);
-    // initialize to max, so that after sorting it appears at last
-    cudaMemset(binPixelIndex, totalPixelNum, sizeof(int) * totalSize);
-    printf("haha1\n");
-
-    // put all pixel into circle bins
-    kernelFindBin<<<gridDim, blockDim>>>(binPixelIndex, binCircleIndex);   
-    cudaDeviceSynchronize();
-    cudaError_t cudaerr = cudaGetLastError();
-    if (cudaerr != cudaSuccess) {
-        printf("cada failed1: %s\n", cudaGetErrorString(cudaerr));
-    }
-
-    // sort bins by pixel index
-    // must wrap device memory with device_ptr
-    thrust::device_ptr<int> dev_binPixelIndex(binPixelIndex);
-    thrust::device_ptr<int> dev_binCircleIndex(binCircleIndex);
-    printf("haha2\n");
-    thrust::stable_sort_by_key(dev_binPixelIndex, dev_binPixelIndex + totalSize, dev_binCircleIndex);
-    printf("haha3\n");
-
-    // find the start and end index of each bin
-    int* begin;
-    int* end;
-    cudaMalloc(&begin, sizeof(int) * totalPixelNum);
-    cudaMalloc(&end, sizeof(int) * totalPixelNum);
-    dim3 blockDim2(256, 1);
-    dim3 gridDim2((totalSize + blockDim2.x - 1) / blockDim2.x);
-    kernelFindBeginAndEnd<<<gridDim2, blockDim2>>>(binPixelIndex, 
-        begin, end, totalSize, totalPixelNum);
-    cudaDeviceSynchronize();
-    cudaerr = cudaGetLastError();
-    if (cudaerr != cudaSuccess) {
-        printf("cada failed2: %s\n", cudaGetErrorString(cudaerr));
-    }
-
-    dim3 blockDim3(16, 16, 1);
-    dim3 gridDim3((image->width + blockDim3.x - 1) / blockDim3.x,
-                    (image->height + blockDim3.y - 1) / blockDim3.y);
-    myBinKernelRenderCircles<<<gridDim3, blockDim3>>>(binPixelIndex, binCircleIndex, begin, end, totalPixelNum);
-    cudaDeviceSynchronize();
-    cudaerr = cudaGetLastError();
-    if (cudaerr != cudaSuccess) {
-        printf("cada failed3: %s\n", cudaGetErrorString(cudaerr));
-    }
-
-    cudaFree(binPixelIndex);
-    cudaFree(binCircleIndex);
-    cudaFree(begin);
-    cudaFree(end);
-    */
+#endif
 }
