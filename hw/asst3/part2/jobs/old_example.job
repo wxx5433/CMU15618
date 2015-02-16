@@ -1,0 +1,30 @@
+#!/bin/bash
+#PBS -l ncpus=ROUNDCORES
+#PBS -l pmem=8gb
+#ncpus must be a multiple of 16
+#PBS -l walltime=10:00              
+
+# Merge stdout and stderr into one output file
+#PBS -j oe
+
+#PBS -q batch
+
+# use the name prog2.job
+#PBS -N prog2.job
+
+# Load mpi.
+source /usr/share/modules/init/bash
+module load mpt
+module load gcc/4.8.0
+
+# Move to my $SCRATCH directory.
+cd $SCRATCH
+
+# Set this to the important directory.
+execdir=PROGDIR
+exe=bfs
+args='/usr/uo/1/vrkrishn/part2/jobs/submit.py'
+cp $execdir/$exe $exe
+
+# Run my executable
+omplace -nt NCORES ./$exe $args
