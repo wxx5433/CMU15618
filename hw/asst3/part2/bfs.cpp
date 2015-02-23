@@ -21,19 +21,16 @@ void vertex_set_init(vertex_set* list, int count) {
     vertex_set_clear(list);
 }
 
-void bottom_up_step(
+int bottom_up_step(
         graph* g, 
-        vertex_set* frontier,
-        vertex_set* new_frontier,
         int* distances, int step) {
-    
-    vertex_set* tmp_frontier; 
-    vertex_set_init(tmp_frontier, g->num_nodes);
 #ifdef DEBUG
     printf("bottom up\n");
 #endif
-    #pragma omp parallel for schedule(dynamic, 500) 
+    int count = 0;
+    #pragma omp parallel for schedule(dynamic, 500) reduction(+:count)
     for (int node = 0; node < g->num_nodes; node++) {
+        int private_count = 0;
         // already find distances
         if (distances[node] != NOT_VISITED_MARKER) {
             continue;
@@ -43,30 +40,34 @@ void bottom_up_step(
         int end_edge = (node == g->num_nodes - 1) ? g->num_edges: g->outgoing_starts[node + 1];
         for (int neighbor = start_edge; neighbor < end_edge; neighbor++) {
             int incoming = g->incoming_edges[neighbor];
-
             // nodes just find in last step
-            // TODO use private and reduce. but how to reduce new_frontier->present?
             if (distances[incoming] == step) {
-                if (__sync_bool_compare_and_swap(&distances[node], NOT_VISITED_MARKER, step + 1)) {
-                    int index = __sync_fetch_and_add(&new_frontier->count, 1);
-                    new_frontier->present[index] = node;
-                }
+                distances[node] = step + 1;
+                ++count;
+                //if (__sync_bool_compare_and_swap(&distances[node], NOT_VISITED_MARKER, step + 1)) {
+                    //++count;
+                //}
+                //if (__sync_bool_compare_and_swap(&distances[node], NOT_VISITED_MARKER, step + 1)) {
+                    //int index = __sync_fetch_and_add(&new_frontier->count, 1);
+                    //new_frontier->present[index] = node;
+                //}
                 break;
             }
         }
+        count += private_count;
     }
-
+    return count;
 }
 
 void bfs_bottom_up(graph* graph, solution* sol)
 {
-    vertex_set list1;
-    vertex_set list2;
-    vertex_set_init(&list1, graph->num_nodes);
-    vertex_set_init(&list2, graph->num_nodes);
+    //vertex_set list1;
+    //vertex_set list2;
+    //vertex_set_init(&list1, graph->num_nodes);
+    //vertex_set_init(&list2, graph->num_nodes);
 
-    vertex_set* frontier = &list1;
-    vertex_set* new_frontier = &list2;
+    //vertex_set* frontier = &list1;
+    //vertex_set* new_frontier = &list2;
 
     #pragma omp parallel for schedule(static)
     for (int i = 0; i < graph->num_nodes; i++) {
@@ -74,30 +75,23 @@ void bfs_bottom_up(graph* graph, solution* sol)
     }
 
     // setup frontier with the root node
-    frontier->present[frontier->count++] = ROOT_NODE_ID;
+    //frontier->present[frontier->count++] = ROOT_NODE_ID;
     sol->distances[ROOT_NODE_ID] = 0;
 
     int step = 0;
-    bool changed = true;
-    while (frontier->count != 0) {
+    int count = 1;
+    while (count != 0) {
 #ifdef DEBUG
         double start_time = CycleTimer::currentSeconds();
 #endif
 
-        vertex_set_clear(new_frontier);
 
-       bottom_up_step(graph, frontier, new_frontier, sol->distances, step++);
-        changed = false;
+        count = bottom_up_step(graph, sol->distances, step++);
 
 #ifdef DEBUG
         double end_time = CycleTimer::currentSeconds();
-        printf("frontier=%-10d %.4f sec\n", frontier->count, end_time - start_time);
+        printf("%.4f sec\n", end_time - start_time);
 #endif
-
-        // swap pointers
-        vertex_set* tmp = frontier;
-        frontier = new_frontier;
-        new_frontier = tmp;
     }
 }
 
@@ -108,7 +102,8 @@ void top_down_step(
     graph* g,
     vertex_set* frontier,
     vertex_set* new_frontier,
-    int* distances)
+    int* distances
+    )
 {
 
 #ifdef DEBUG
@@ -201,7 +196,7 @@ void bfs_hybrid(graph* graph, solution* sol) {
     frontier->present[frontier->count++] = ROOT_NODE_ID;
     sol->distances[ROOT_NODE_ID] = 0;
 
-    int switchNum = (int)(0.1 * graph->num_nodes);
+    int switchNum = (int)(0.07 * graph->num_nodes);
 #ifdef DEBUG
     printf("switch num: %d\n", switchNum);
 #endif
@@ -212,24 +207,26 @@ void bfs_hybrid(graph* graph, solution* sol) {
 #ifdef DEBUG
         double start_time = CycleTimer::currentSeconds();
 #endif
-
         vertex_set_clear(new_frontier);
 
-        if (frontier->count < switchNum) {
-            top_down_step(graph, frontier, new_frontier, sol->distances);
-        } else {
-            bottom_up_step(graph, frontier, new_frontier, sol->distances, step);
+        if (frontier->count > switchNum) {
+            break;
         }
         ++step;
+        top_down_step(graph, frontier, new_frontier, sol->distances);
 
 #ifdef DEBUG
         double end_time = CycleTimer::currentSeconds();
         printf("frontier=%-10d %.4f sec\n", frontier->count, end_time - start_time);
 #endif
-
         // swap pointers
         vertex_set* tmp = frontier;
         frontier = new_frontier;
         new_frontier = tmp;
+    }
+    int count = 1;
+    while (count != 0) {
+        count = bottom_up_step(graph, sol->distances, step);
+        ++step;
     }
 }

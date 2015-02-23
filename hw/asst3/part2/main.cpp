@@ -143,6 +143,7 @@ int main(int argc, char** argv) {
             //Set thread count
             omp_set_num_threads(assignment[i]);
 
+            
             //Run implementations
             start = CycleTimer::currentSeconds();
             bfs_top_down(&g, &sol1);
