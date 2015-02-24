@@ -14,7 +14,7 @@ struct solution
 struct vertex_set {
     int  count;
     int  alloc_count;
-    int* present;
+    bool* present;
 };
 
 
