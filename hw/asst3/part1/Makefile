@@ -37,7 +37,7 @@ LDFLAGS+=-lpthread -lmpi -lmpi_cxx -Llib -lsort
 all : parallelSort
 
 run : parallelSort
-	LD_LIBRARY_PATH=./lib:$(LD_LIBRARY_PATH) $(MPIRUN) -np 4 parallelSort -s 10000000 -d norm -p 5
+	LD_LIBRARY_PATH=./lib:$(LD_LIBRARY_PATH) $(MPIRUN) -np 4 parallelSort -s 100000000 -d norm -p 5
 
 parallelSort: $(OBJS)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $^ -o $@

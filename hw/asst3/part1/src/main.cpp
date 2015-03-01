@@ -63,10 +63,12 @@ int main(int argc, char **argv) {
 
   double startTime, endTime;
 
+  assert( MPI_Barrier(MPI_COMM_WORLD) == MPI_SUCCESS );
   startTime = MPI_Wtime();
   float *dummySorted = NULL;
   size_t dummySize = localSize;
   parallelSort_reference(data, dummySorted, procs, procId, dataSize, dummySize);
+  assert( MPI_Barrier(MPI_COMM_WORLD) == MPI_SUCCESS );
   endTime = MPI_Wtime();
 
   double refTime = endTime - startTime;
@@ -74,6 +76,7 @@ int main(int argc, char **argv) {
   startTime = MPI_Wtime();
   sortedData = NULL;
   parallelSort(data, sortedData, procs, procId, dataSize, localSize);
+  assert( MPI_Barrier(MPI_COMM_WORLD) == MPI_SUCCESS );
   endTime = MPI_Wtime();
 
   double solTime = endTime - startTime;
