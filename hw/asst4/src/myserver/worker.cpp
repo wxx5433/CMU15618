@@ -8,6 +8,11 @@
 #include "server/messages.h"
 #include "server/worker.h"
 #include "tools/cycle_timer.h"
+#include "tools/work_queue.h"
+
+WorkQueue<Request_msg>* request_queue;
+
+void* worker_thread(void* thread_args);
 
 // Generate a valid 'countprimes' request dictionary from integer 'n'
 static void create_computeprimes_req(Request_msg& req, int n) {
@@ -55,12 +60,23 @@ void worker_node_init(const Request_msg& params) {
 
   DLOG(INFO) << "**** Initializing worker: " << params.get_arg("name") << " ****\n";
 
+  request_queue = new WorkQueue<Request_msg>;
+  pthread_t worker1, worker2;
+
+  pthread_create(&worker1, NULL, worker_thread, NULL);
+  pthread_create(&worker2, NULL, worker_thread, NULL);
 }
 
 void worker_handle_request(const Request_msg& req) {
+  // Output debugging help to the logs (in a single worker node
+  // configuration, this would be in the log logs/worker.INFO)
+  DLOG(INFO) << "Worker got request: [" << req.get_tag() << ":" << req.get_request_string() << "]\n";
+  // simple put into queue
+  request_queue->put_work(req);
 
   // Make the tag of the reponse match the tag of the request.  This
   // is a way for your master to match worker responses to requests.
+  /*
   Response_msg resp(req.get_tag());
 
   // Output debugging help to the logs (in a single worker node
@@ -83,7 +99,6 @@ void worker_handle_request(const Request_msg& req) {
     // actually perform the work.  The response string is filled in by
     // 'execute_work'
     execute_work(req, resp);
-
   }
 
   double dt = CycleTimer::currentSeconds() - startTime;
@@ -91,4 +106,31 @@ void worker_handle_request(const Request_msg& req) {
 
   // send a response string to the master
   worker_send_response(resp);
+    */
+}
+
+void* worker_thread(void* thread_args) {
+  while (1) {
+    Request_msg req = request_queue->get_work();
+    Response_msg resp= req.get_tag();
+    
+    double startTime = CycleTimer::currentSeconds();
+    if (req.get_arg("cmd").compare("compareprimes") == 0) {
+
+      // The compareprimes command needs to be special cased since it is
+      // built on four calls to execute_execute work.  All other
+      // requests from the client are one-to-one with calls to
+      // execute_work.
+      execute_compareprimes(req, resp);
+    } else {
+      // actually perform the work.  The response string is filled in by
+      // 'execute_work'
+      execute_work(req, resp);
+    }
+    double dt = CycleTimer::currentSeconds() - startTime;
+    DLOG(INFO) << "Worker completed work in " << (1000.f * dt) << " ms (" << req.get_tag()  << ")\n";
+    // send a response string to the master
+    worker_send_response(resp);
+  }
+  return NULL;
 }

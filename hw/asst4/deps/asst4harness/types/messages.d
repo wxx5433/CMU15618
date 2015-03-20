@@ -84,8 +84,8 @@ objs/asst4harness/types/messages.o deps/asst4harness/types/messages.d : src/asst
  /usr/lib/gcc/x86_64-redhat-linux/4.4.7/../../../../include/c++/4.4.7/bits/ostream.tcc \
  /usr/lib/gcc/x86_64-redhat-linux/4.4.7/../../../../include/c++/4.4.7/bits/istream.tcc \
  /usr/lib/gcc/x86_64-redhat-linux/4.4.7/../../../../include/c++/4.4.7/bits/sstream.tcc \
- /afs/andrew.cmu.edu/usr17/xiaoxiaw/private/15-618/hw/asst4/src/asst4include/server/messages.h \
- /afs/andrew.cmu.edu/usr17/xiaoxiaw/private/15-618/hw/asst4/src/asst4harness/types/types.h \
+ /home/xiaoxiaw/asst4/src/asst4include/server/messages.h \
+ /home/xiaoxiaw/asst4/src/asst4harness/types/types.h \
  /afs/cs/academic/class/15418-s13/public/include/boost/shared_ptr.hpp \
  /afs/cs/academic/class/15418-s13/public/include/boost/smart_ptr/shared_ptr.hpp \
  /afs/cs/academic/class/15418-s13/public/include/boost/config.hpp \

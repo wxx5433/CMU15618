@@ -383,9 +383,8 @@ objs/asst4harness/comm/comm.o deps/asst4harness/comm/comm.d : src/asst4harness/c
  /usr/include/bits/socket.h /usr/include/bits/sockaddr.h \
  /usr/include/asm/socket.h /usr/include/asm-generic/socket.h \
  /usr/include/asm/sockios.h /usr/include/asm-generic/sockios.h \
- /usr/include/string.h \
- /afs/andrew.cmu.edu/usr17/xiaoxiaw/private/15-618/hw/asst4/src/asst4harness/comm/comm.h \
- /afs/andrew.cmu.edu/usr17/xiaoxiaw/private/15-618/hw/asst4/src/asst4harness/types/types.h \
+ /usr/include/string.h /home/xiaoxiaw/asst4/src/asst4harness/comm/comm.h \
+ /home/xiaoxiaw/asst4/src/asst4harness/types/types.h \
  /afs/cs/academic/class/15418-s13/public/include/boost/shared_ptr.hpp \
  /usr/lib/gcc/x86_64-redhat-linux/4.4.7/../../../../include/c++/4.4.7/iostream \
  /usr/lib/gcc/x86_64-redhat-linux/4.4.7/../../../../include/c++/4.4.7/ostream \
