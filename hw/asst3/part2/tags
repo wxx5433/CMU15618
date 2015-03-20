@@ -1,0 +1,60 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_PROGRAM_AUTHOR	Darren Hiebert	/dhiebert@users.sourceforge.net/
+!_TAG_PROGRAM_NAME	Exuberant Ctags	//
+!_TAG_PROGRAM_URL	http://ctags.sourceforge.net	/official site/
+!_TAG_PROGRAM_VERSION	5.8	//
+CycleTimer	CycleTimer.h	/^  class CycleTimer {$/;"	c
+GRAPH_HEADER_TOKEN	graph.cpp	9;"	d	file:
+LD_LIBRARY_PATH	Makefile	/^	LD_LIBRARY_PATH=.\/lib\/:$(LD_LIBRARY_PATH) .\/bfs ${GRAPH} $(N_THREADS)$/;"	m
+NOT_VISITED_MARKER	bfs.cpp	12;"	d	file:
+ROOT_NODE_ID	bfs.cpp	11;"	d	file:
+SysClock	CycleTimer.h	/^    typedef unsigned long long SysClock;$/;"	t	class:CycleTimer
+USE_BINARY_GRAPH	main.cpp	14;"	d	file:
+_SYRAH_CYCLE_TIMER_H_	CycleTimer.h	2;"	d
+__BFS_H__	bfs.h	2;"	d
+__GRAPH_H__	graph.h	2;"	d
+alloc_count	bfs.h	/^    int  alloc_count;$/;"	m	struct:vertex_set
+bfs_bottom_up	bfs.cpp	/^void bfs_bottom_up(graph* graph, solution* sol)$/;"	f
+bfs_top_down	bfs.cpp	/^void bfs_top_down(graph* graph, solution* sol) {$/;"	f
+build_edges	graph.cpp	/^void build_edges(graph* graph, int* scratch)$/;"	f
+build_incoming_edges	graph.cpp	/^void build_incoming_edges(graph* graph) {$/;"	f
+build_start	graph.cpp	/^void build_start(graph* graph, int* scratch)$/;"	f
+count	bfs.h	/^    int  count;$/;"	m	struct:vertex_set
+currentSeconds	CycleTimer.h	/^    static double currentSeconds() {$/;"	f	class:CycleTimer
+currentTicks	CycleTimer.h	/^    static SysClock currentTicks() {$/;"	f	class:CycleTimer
+distances	bfs.h	/^    int* distances;$/;"	m	struct:solution
+f	jobs/submit.py	/^f = open("example.job", "r")$/;"	v
+get_meta_data	graph.cpp	/^void get_meta_data(std::ifstream& file, graph* graph)$/;"	f
+graph	graph.h	/^struct graph$/;"	s
+incoming_edges	graph.h	/^    int* incoming_edges;$/;"	m	struct:graph
+incoming_starts	graph.h	/^    int* incoming_starts;$/;"	m	struct:graph
+load_graph	graph.cpp	/^void load_graph(const char* filename, graph* graph)$/;"	f
+load_graph_binary	graph.cpp	/^void load_graph_binary(const char* filename, graph* graph) {$/;"	f
+main	main.cpp	/^int main(int argc, char** argv) {$/;"	f
+msPerTick	CycleTimer.h	/^    static double msPerTick() {$/;"	f	class:CycleTimer
+num_edges	graph.h	/^    int num_edges;$/;"	m	struct:graph
+num_nodes	graph.h	/^    int num_nodes;$/;"	m	struct:graph
+os	jobs/submit.py	/^import os, sys$/;"	i
+outgoing_edges	graph.h	/^    int* outgoing_edges;$/;"	m	struct:graph
+outgoing_starts	graph.h	/^    int* outgoing_starts;$/;"	m	struct:graph
+path	jobs/submit.py	/^path = os.path.abspath(sys.argv[1])$/;"	v
+present	bfs.h	/^    int* present;$/;"	m	struct:vertex_set
+print_graph	graph.cpp	/^void print_graph(const graph* graph) {$/;"	f
+re	jobs/submit.py	/^import re$/;"	i
+read_graph_file	graph.cpp	/^void read_graph_file(std::ifstream& file, int* scratch)$/;"	f
+rm_cmd	jobs/submit.py	/^rm_cmd = "rm -f %s_*" % (username)$/;"	v
+secondsPerTick	CycleTimer.h	/^    static double secondsPerTick() {$/;"	f	class:CycleTimer
+solution	bfs.h	/^struct solution$/;"	s
+store_graph_binary	graph.cpp	/^void store_graph_binary(const char* filename, graph* graph) {$/;"	f
+subprocess	jobs/submit.py	/^import subprocess$/;"	i
+sys	jobs/submit.py	/^import os, sys$/;"	i
+tickUnits	CycleTimer.h	/^    static const char* tickUnits() {$/;"	f	class:CycleTimer
+ticksPerSecond	CycleTimer.h	/^    static double ticksPerSecond() {$/;"	f	class:CycleTimer
+tmp	jobs/submit.py	/^tmp = open("tmp.job", "w")$/;"	v
+top_down_step	bfs.cpp	/^void top_down_step($/;"	f
+username	jobs/submit.py	/^username = username_out[0].replace('\\n',"")$/;"	v
+username_out	jobs/submit.py	/^username_out = subprocess.Popen(['echo $USER'], shell=True, stdout=subprocess.PIPE).communicate()$/;"	v
+vertex_set	bfs.h	/^struct vertex_set {$/;"	s
+vertex_set_clear	bfs.cpp	/^void vertex_set_clear(vertex_set* list) {$/;"	f
+vertex_set_init	bfs.cpp	/^void vertex_set_init(vertex_set* list, int count) {$/;"	f
