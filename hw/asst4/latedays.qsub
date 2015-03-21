@@ -7,23 +7,7 @@
 # good reason to increase your walltime unless you wanted to run a
 # singled threaded server on a full trace just for correctness.
 #
-
 #PBS -lwalltime=0:6:00
-
-#
-# Ask for a specific number oflateday's 14 nodes for this job.  ppn=24
-# should not be changed. It indicates that each node has up to 24
-# "virtual cores" (12 hyperthraded cores)
-#
-# In the starter code, nodes=2.  For grading runs you should change
-# this parameter to nodes=5 and set max worker nodes to 4 when
-# launching jobs: qsub -F "4 tests/mytestname.txt" latedays.qsub
-#
-# When testing, it is courteous to other students to only request the
-# number of nodes that you need.
-#
-
-#PBS -l nodes=2:ppn=24
 
 
 #

@@ -1,5 +1,4 @@
 #!/bin/bash
-## spawner.sh
 CMD=$0
 NUM_WORKERS=$1
 TRACE=$2
@@ -37,7 +36,8 @@ if [ $MASTER.local = $HOSTNAME ] ; then
   master_pid=$!
   sleep .5
 
-  # Run the trace driver
+  # Run the test harness (this python script generates all the requests
+  # and verifies the correctness of the server's responses)
   ./scripts/workgen.py $debug_pyflags $(hostname):15418 $TRACE
 
   success=$?

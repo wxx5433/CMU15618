@@ -138,7 +138,14 @@ def launch_remote_worker(addr, wr):
         return
 
     # command = "ssh -o StrictHostKeyChecking=no %s '%s'" % (remote_host, local_command(addr, wr))
-    command = "ssh %s '%s'" % (remote_host, ("cd %s; " % remote_cwd) + local_command(addr, wr))
+    local_cmd = local_command(addr, wr)
+    # HACK(mchoquet): checks if running on latedays.andrew.cmu.edu, and runs a
+    #                 different script if so.
+    if (args.nodefile is not None):
+      worker_cmd = "cd %s; source scripts/load_modules.sh; %s" % (remote_cwd, local_cmd)
+    else:
+      worker_cmd = "cd %s; %s" % (remote_cwd, local_cmd)
+    command = "ssh %s '%s'" % (remote_host, worker_cmd)
     if args.verbose:
         print "Launch worker: " + command
 

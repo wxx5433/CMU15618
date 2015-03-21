@@ -5,7 +5,7 @@ DEPDIR=deps
 LOGDIR=logs.*
 
 # all should come first in the file, so it is the default target!
-.PHONY: all run clean veryclean foo
+.PHONY: all run clean cleanlogs
 all : worker master
 
 run: run.sh worker master | $(LOGDIR)
@@ -61,7 +61,7 @@ ifneq ($(strip $(LIBS_NOTFOUND)),)
 endif
 
 CXX=g++
-CXXFLAGS+=-Wall -Wextra -O2
+CXXFLAGS+=-Wall -Wextra -O2 -std=c++11
 CPPFLAGS+=-I$(CURDIR)/src/asst4harness -I$(CURDIR)/src/asst4include $(foreach lib,$(LIBS), $(shell $(PKGCONFIG) --cflags $(lib)))
 LDFLAGS+=-lpthread $(foreach lib,$(LIBS), $(shell $(PKGCONFIG) --libs $(lib))) -Xlinker -rpath -Xlinker external_lib
 
@@ -84,11 +84,8 @@ $(DEPDIR)/%.d: $(SRCDIR)/%.cpp Makefile
 -include $(DEPS)
 
 clean:
-	rm -rf $(OBJDIR) master worker *.pyc
-
-veryclean: clean
-	rm -rf $(DEPDIR) $(LOGDIR)
+	rm -rf $(OBJDIR) $(DEPDIR) master worker *.pyc
 
 cleanlogs:
-	rm -rf latedays.qsub.*
+	rm -rf $(LOGDIR) latedays.qsub.*
 
