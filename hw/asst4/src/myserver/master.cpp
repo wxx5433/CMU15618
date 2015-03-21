@@ -14,7 +14,7 @@
 using namespace std;
 
 enum State {FREE, WORKING, BUSY};
-const int WORKER_NUM = 24;
+const int THREAD_NUM = 24;
 
 typedef struct {
     State state;
@@ -65,7 +65,7 @@ void master_node_init(int max_workers, int& tick_period) {
 
   // set up tick handler to fire every 5 seconds. (feel free to
   // configure as you please)
-  tick_period = 2;
+  tick_period = 1;
 
   mstate.next_tag = 0;
   mstate.worker_num = 0;
@@ -79,13 +79,10 @@ void master_node_init(int max_workers, int& tick_period) {
   // when 'master_node_init' returnes
   mstate.server_ready = false;
 
-  // fire off a request for a new worker
-  for (int i = 0; i < max_workers; ++i) {
-    int tag = mstate.next_tag++;
-    Request_msg req(tag);
-    req.set_arg("name", "my worker " + tag);
-    request_new_worker_node(req);
-  }
+  int tag = mstate.next_tag++;
+  Request_msg req(tag);
+  req.set_arg("name", "my worker " + tag);
+  request_new_worker_node(req);
 }
 
 /* 
@@ -170,7 +167,11 @@ void handle_worker_response(Worker_handle worker_handle, const Response_msg& res
       mstate.working_workers.remove(worker_handle);
       // add to free workers list
       mstate.free_workers.push(worker_handle);
-    } else if (info.processing_request_num == WORKER_NUM - 1) {
+      DLOG(INFO) << "Add worker " << info.tag << " to free queue" << endl;
+      DLOG(INFO) << "free workers num: " << mstate.free_workers.size() << endl;
+      DLOG(INFO) << "working workers num: " << mstate.working_workers.size() << endl;
+      DLOG(INFO) << "full workers num: " << mstate.busy_workers.size() << endl;
+    } else if (info.processing_request_num == THREAD_NUM - 1) {
       info.state = WORKING;
       mstate.busy_workers.remove(worker_handle);
       mstate.working_workers.insert(mstate.working_workers.begin(), worker_handle);
@@ -235,7 +236,7 @@ void handle_client_request(Client_handle client_handle, const Request_msg& clien
     Info info = info_it->second;
     info.processing_request_num++;
     // if the worker has max processing requests
-    if (info.processing_request_num == WORKER_NUM) {
+    if (info.processing_request_num == THREAD_NUM) {
       info.state = BUSY;
       // add to busy workers
       mstate.working_workers.remove(worker);
@@ -286,22 +287,6 @@ void handle_client_request(Client_handle client_handle, const Request_msg& clien
   // required.
 }
 
-void handle_tick() {
-
-  // TODO: you may wish to take action here.  This method is called at
-  // fixed time intervals, according to how you set 'tick_period' in
-  // 'master_node_init'.
-  /*
-  if (mstate.worker_num < mstate.max_num_workers) {
-    int tag = mstate.next_tag++;
-    Request_msg req(tag);
-    req.set_arg("name", "my worker " + tag);
-    request_new_worker_node(req);
-    mstate.worker_num++;
-  }
-  */
-}
-
 bool check_cache(Client_handle client_handle, const Request_msg& client_req) {
   map<string, Response_msg>::iterator request_it = mstate.request_cache.find(client_req.get_request_string());
   if (request_it != mstate.request_cache.end()) {
@@ -324,3 +309,37 @@ Client_handle get_client_handle(int tag) {
 #endif
   return client_it->second;
 }
+
+void start_new_worker() {
+  if (mstate.worker_num < mstate.max_num_workers) {
+    int tag = mstate.next_tag++;
+    Request_msg req(tag);
+    req.set_arg("name", "my worker " + tag);
+    request_new_worker_node(req);
+    mstate.worker_num++;
+  }
+}
+
+void handle_tick() {
+
+  // TODO: you may wish to take action here.  This method is called at
+  // fixed time intervals, according to how you set 'tick_period' in
+  // 'master_node_init'.
+  /*
+  int remaining_power = mstate.worker_num * THREAD_NUM 
+      - mstate.num_pending_client_requests;
+  if (remaining_power < THREAD_NUM / 2) {
+    start_new_worker();
+  } else if (remaining_power > THREAD_NUM && 
+          !mstate.free_workers.empty()) {
+    Worker_handle worker_handle = mstate.free_workers.front();
+    mstate.free_workers.pop();
+    kill_worker_node(worker_handle);
+    mstate.worker_num--;
+    mstate.worker_info.erase(worker_handle);
+
+    DLOG(INFO) << "KILL worker!" << endl;
+  }
+  */
+}
+
