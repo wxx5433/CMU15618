@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <map>
-#include <vector>
+#include <list>
 
 #include "server/messages.h"
 #include "server/master.h"
@@ -21,9 +21,17 @@ static struct Master_state {
   int num_pending_client_requests;
   int next_tag;
 
-  // key: worker tag, value: worker_handle
-  map<int, Worker_handle> my_worker;
-  // key: request tag, value: client_handle
+  // workers that are not processing requests
+  queue<Worker_handle> free_workers;
+  // workers that are processing reqeusts
+  queue<Worker_handle> working_workers;
+  // workers that has no processing power
+  queue<Worker_handle> busy_workers;
+
+  // all requests that need to be processed
+  queue<Request_msg> request_queue;
+
+  // key: request tag, value: client handle
   map<int, Client_handle> waiting_client;
 
 } mstate;
@@ -46,29 +54,19 @@ void master_node_init(int max_workers, int& tick_period) {
   mstate.server_ready = false;
 
   // fire off a request for a new worker
-
-  int tag = random();
+  int tag = mstate.next_tag++;
   Request_msg req(tag);
-  req.set_arg("name", "my worker 0");
+  req.set_arg("name", "my worker " + tag);
   request_new_worker_node(req);
-
-  //for (int i = 0; i < max_workers; ++i) {
-      //int tag = mstate.next_tag++;
-      //Request_msg req(tag);
-      //req.set_arg("name", "my worker " + tag);
-      //request_new_worker_node(req);
-  //}
-
 }
 
+/* 
+ * 'tag' allows you to identify which worker request 
+ * this response corresponds to. 
+ */
 void handle_new_worker_online(Worker_handle worker_handle, int tag) {
-
-  // 'tag' allows you to identify which worker request this response
-  // corresponds to.  Since the starter code only sends off one new
-  // worker request, we don't use it here.
-
-  //mstate.my_worker = worker_handle;
-  mstate.my_worker[tag] = worker_handle;
+  // add the new worker to free workers queue
+  mstate.free_workers.push(worker_handle);
 
   // Now that a worker is booted, let the system know the server is
   // ready to begin handling client requests.  The test harness will
@@ -86,9 +84,14 @@ void handle_worker_response(Worker_handle worker_handle, const Response_msg& res
 
   DLOG(INFO) << "Master received a response from a worker: [" << resp.get_tag() << ":" << resp.get_response() << "]" << std::endl;
 
-  send_client_response(worker_handle, resp);
-  //mstate.num_pending_client_requests = 0;
+  int req_tag = resp.get_tag();
+  Client_handle client = mstate.waiting_client.find(req_tag);
+  if (client != mstate.waiting_client.end()) {
+    send_client_response(client, resp);
+  }
+
   mstate.num_pending_client_requests--;
+  mstate.erase(req_tag);
 }
 
 void handle_client_request(Client_handle client_handle, const Request_msg& client_req) {
@@ -105,29 +108,50 @@ void handle_client_request(Client_handle client_handle, const Request_msg& clien
     return;
   }
 
+  // The provided starter code cannot handle multiple pending client
+  // requests.  The server returns an error message, and the checker
+  // will mark the response as "incorrect"
+  //if (mstate.num_pending_client_requests > 0) {
+    //Response_msg resp(0);
+    //resp.set_response("Oh no! This server cannot handle multiple outstanding requests!");
+    //send_client_response(client_handle, resp);
+    //return;
+  //}
+
   // Save off the handle to the client that is expecting a response.
   // The master needs to do this it can response to this client later
   // when 'handle_worker_response' is called.
-  //mstate.waiting_client = client_handle;
+  mstate.waiting_client[client_req.get_tag()] = worker_handle;
   mstate.num_pending_client_requests++;
 
   // Fire off the request to the worker.  Eventually the worker will
   // respond, and your 'handle_worker_response' event handler will be
   // called to forward the worker's response back to the server.
-  // TODO need to consider load balancing
   int tag = mstate.next_tag++;
-  mstate.waiting_client[tag] = client_handle;
   Request_msg worker_req(tag, client_req);
-  send_request_to_worker(mstate.my_worker[0], worker_req);
-
+  // First assign requests to workers that is already processing requests. 
+  if (!mstate.working_workers.empty()) {
+    // remove from working queue
+    Worker_handle worker = mstate.working_workers.pop();
+    // send request
+    send_request_to_worker(worker, worker_req);
+    // add to busy workers
+    mstate.busy_workers.push(worker);
+  } else if (!mstate.free_workers.empty()){
+    // remove from free queue
+    Worker_handle worker = mstate.free_workers.pop();
+    // send request
+    send_request_to_worker(worker, worker_req);
+    // add to working queue
+    mstate.working_workers.push(worker);
+  } else {  // add to request queues if no available workers
+    mstate.request_queue.push(worker_req);
+  }
   // We're done!  This event handler now returns, and the master
   // process calls another one of your handlers when action is
   // required.
-
 }
 
-
-// TODO should add/kill workers according to pending requests number
 void handle_tick() {
 
   // TODO: you may wish to take action here.  This method is called at
@@ -135,4 +159,3 @@ void handle_tick() {
   // 'master_node_init'.
 
 }
-

@@ -103,12 +103,12 @@ objs/myserver/worker.o deps/myserver/worker.d : src/myserver/worker.cpp /usr/inc
  /afs/cs/academic/class/15418-s13/public/include/gflags/gflags_declare.h \
  /afs/cs/academic/class/15418-s13/public/include/glog/log_severity.h \
  /afs/cs/academic/class/15418-s13/public/include/glog/vlog_is_on.h \
- /home/xiaoxiaw/asst4/src/asst4include/server/messages.h \
+ /home/xiaoxiaw/asst4/hw/asst4/src/asst4include/server/messages.h \
  /usr/lib/gcc/x86_64-redhat-linux/4.4.7/../../../../include/c++/4.4.7/map \
  /usr/lib/gcc/x86_64-redhat-linux/4.4.7/../../../../include/c++/4.4.7/bits/stl_tree.h \
  /usr/lib/gcc/x86_64-redhat-linux/4.4.7/../../../../include/c++/4.4.7/bits/stl_map.h \
  /usr/lib/gcc/x86_64-redhat-linux/4.4.7/../../../../include/c++/4.4.7/bits/stl_multimap.h \
- /home/xiaoxiaw/asst4/src/asst4include/server/worker.h \
- /home/xiaoxiaw/asst4/src/asst4include/tools/cycle_timer.h \
+ /home/xiaoxiaw/asst4/hw/asst4/src/asst4include/server/worker.h \
+ /home/xiaoxiaw/asst4/hw/asst4/src/asst4include/tools/cycle_timer.h \
  /usr/include/sys/time.h \
- /home/xiaoxiaw/asst4/src/asst4include/tools/work_queue.h
+ /home/xiaoxiaw/asst4/hw/asst4/src/asst4include/tools/work_queue.h

@@ -416,14 +416,14 @@ objs/asst4harness/worker/main.o deps/asst4harness/worker/main.d : src/asst4harne
  /afs/cs/academic/class/15418-s13/public/include/boost/type_traits/has_trivial_destructor.hpp \
  /afs/cs/academic/class/15418-s13/public/include/boost/smart_ptr/detail/sp_if_array.hpp \
  /afs/cs/academic/class/15418-s13/public/include/boost/smart_ptr/allocate_shared_array.hpp \
- /home/xiaoxiaw/asst4/src/asst4harness/comm/connect.h \
- /home/xiaoxiaw/asst4/src/asst4harness/comm/comm.h \
- /home/xiaoxiaw/asst4/src/asst4harness/types/types.h \
+ /home/xiaoxiaw/asst4/hw/asst4/src/asst4harness/comm/connect.h \
+ /home/xiaoxiaw/asst4/hw/asst4/src/asst4harness/comm/comm.h \
+ /home/xiaoxiaw/asst4/hw/asst4/src/asst4harness/types/types.h \
  /afs/cs/academic/class/15418-s13/public/include/boost/shared_ptr.hpp \
  /usr/lib/gcc/x86_64-redhat-linux/4.4.7/../../../../include/c++/4.4.7/iostream \
- /home/xiaoxiaw/asst4/src/asst4include/server/messages.h \
+ /home/xiaoxiaw/asst4/hw/asst4/src/asst4include/server/messages.h \
  /usr/lib/gcc/x86_64-redhat-linux/4.4.7/../../../../include/c++/4.4.7/map \
  /usr/lib/gcc/x86_64-redhat-linux/4.4.7/../../../../include/c++/4.4.7/bits/stl_tree.h \
  /usr/lib/gcc/x86_64-redhat-linux/4.4.7/../../../../include/c++/4.4.7/bits/stl_map.h \
  /usr/lib/gcc/x86_64-redhat-linux/4.4.7/../../../../include/c++/4.4.7/bits/stl_multimap.h \
- /home/xiaoxiaw/asst4/src/asst4include/server/worker.h
+ /home/xiaoxiaw/asst4/hw/asst4/src/asst4include/server/worker.h

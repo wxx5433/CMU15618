@@ -425,7 +425,7 @@ objs/asst4harness/worker/work_engine.o deps/asst4harness/worker/work_engine.d : 
  /usr/lib/gcc/x86_64-redhat-linux/4.4.7/../../../../include/c++/4.4.7/bits/stl_tree.h \
  /usr/lib/gcc/x86_64-redhat-linux/4.4.7/../../../../include/c++/4.4.7/bits/stl_map.h \
  /usr/lib/gcc/x86_64-redhat-linux/4.4.7/../../../../include/c++/4.4.7/bits/stl_multimap.h \
- /home/xiaoxiaw/asst4/src/asst4include/server/messages.h \
- /home/xiaoxiaw/asst4/src/asst4include/server/worker.h \
- /home/xiaoxiaw/asst4/src/asst4include/tools/cycle_timer.h \
+ /home/xiaoxiaw/asst4/hw/asst4/src/asst4include/server/messages.h \
+ /home/xiaoxiaw/asst4/hw/asst4/src/asst4include/server/worker.h \
+ /home/xiaoxiaw/asst4/hw/asst4/src/asst4include/tools/cycle_timer.h \
  /usr/include/sys/time.h

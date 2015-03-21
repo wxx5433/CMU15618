@@ -102,9 +102,9 @@ objs/asst4harness/master/main.o deps/asst4harness/master/main.d : src/asst4harne
  /usr/include/bits/stdio.h /usr/include/stdlib.h \
  /usr/include/bits/waitflags.h /usr/include/bits/waitstatus.h \
  /usr/include/alloca.h \
- /home/xiaoxiaw/asst4/src/asst4harness/comm/connect.h \
- /home/xiaoxiaw/asst4/src/asst4harness/comm/comm.h \
- /home/xiaoxiaw/asst4/src/asst4harness/types/types.h \
+ /home/xiaoxiaw/asst4/hw/asst4/src/asst4harness/comm/connect.h \
+ /home/xiaoxiaw/asst4/hw/asst4/src/asst4harness/comm/comm.h \
+ /home/xiaoxiaw/asst4/hw/asst4/src/asst4harness/types/types.h \
  /afs/cs/academic/class/15418-s13/public/include/boost/shared_ptr.hpp \
  /afs/cs/academic/class/15418-s13/public/include/boost/smart_ptr/shared_ptr.hpp \
  /afs/cs/academic/class/15418-s13/public/include/boost/config.hpp \
@@ -268,4 +268,4 @@ objs/asst4harness/master/main.o deps/asst4harness/master/main.d : src/asst4harne
  /usr/lib/gcc/x86_64-redhat-linux/4.4.7/../../../../include/c++/4.4.7/bits/stl_heap.h \
  /afs/cs/academic/class/15418-s13/public/include/boost/smart_ptr/detail/operator_bool.hpp \
  /usr/lib/gcc/x86_64-redhat-linux/4.4.7/../../../../include/c++/4.4.7/iostream \
- /home/xiaoxiaw/asst4/src/asst4include/server/master.h
+ /home/xiaoxiaw/asst4/hw/asst4/src/asst4include/server/master.h
