@@ -14,8 +14,7 @@ WorkQueue<Request_msg>* request_queue;
 
 void* worker_thread(void* thread_args);
 
-const int WORKER_NUM = 24;
-
+const int WORKER_NUM = 24; 
 // Generate a valid 'countprimes' request dictionary from integer 'n'
 static void create_computeprimes_req(Request_msg& req, int n) {
   std::ostringstream oss;
