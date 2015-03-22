@@ -65,7 +65,7 @@ void master_node_init(int max_workers, int& tick_period) {
 
   // set up tick handler to fire every 5 seconds. (feel free to
   // configure as you please)
-  tick_period = 1;
+  tick_period = 2;
 
   mstate.next_tag = 0;
   mstate.worker_num = 0;
@@ -280,7 +280,7 @@ void handle_client_request(Client_handle client_handle, const Request_msg& clien
 
   } else {  // add to request queues if no available workers
     mstate.request_queue.push(worker_req);
-    DLOG(INFO) << "add request into master queue" << endl;
+    DLOG(INFO) << "add request into master queue -- num: " << mstate.request_queue.size() << endl;
   }
   // We're done!  This event handler now returns, and the master
   // process calls another one of your handlers when action is
@@ -325,7 +325,6 @@ void handle_tick() {
   // TODO: you may wish to take action here.  This method is called at
   // fixed time intervals, according to how you set 'tick_period' in
   // 'master_node_init'.
-  /*
   int remaining_power = mstate.worker_num * THREAD_NUM 
       - mstate.num_pending_client_requests;
   if (remaining_power < THREAD_NUM / 2) {
@@ -340,6 +339,5 @@ void handle_tick() {
 
     DLOG(INFO) << "KILL worker!" << endl;
   }
-  */
 }
 
