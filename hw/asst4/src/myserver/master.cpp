@@ -9,7 +9,7 @@
 #include "server/messages.h"
 #include "server/master.h"
 
-//#define DEBUG
+#define DEBUG
 
 using namespace std;
 
@@ -60,6 +60,10 @@ static struct Master_state {
 
 bool check_cache(Client_handle, const Request_msg&);
 Client_handle get_client_handle(int tag);
+void start_new_worker();
+void update_response_cache(int resp_tag, const Response_msg& resp);
+Info get_worker_info(Worker_handle& worker_handle);
+void print_worker_queue_info();
 
 void master_node_init(int max_workers, int& tick_period) {
 
@@ -79,10 +83,7 @@ void master_node_init(int max_workers, int& tick_period) {
   // when 'master_node_init' returnes
   mstate.server_ready = false;
 
-  int tag = mstate.next_tag++;
-  Request_msg req(tag);
-  req.set_arg("name", "my worker " + tag);
-  request_new_worker_node(req);
+  start_new_worker();
 }
 
 /* 
@@ -117,69 +118,51 @@ void handle_worker_response(Worker_handle worker_handle, const Response_msg& res
 
   DLOG(INFO) << "Master received a response from a worker: [" << resp.get_tag() << ":" << resp.get_response() << "]" << std::endl;
 
+  // send response to client
   int resp_tag = resp.get_tag();
-#ifdef DEBUG
-  DLOG(INFO) << "resp tag: " << resp_tag << endl;
-  for (std::map<int,Client_handle>::iterator it=mstate.waiting_client.begin(); 
-          it!=mstate.waiting_client.end(); ++it) {
-    DLOG(INFO) << it->first << " => " << it->second << endl;
-  }
-#endif
   Client_handle client_handle = get_client_handle(resp_tag);
   send_client_response(client_handle, resp);
   mstate.num_pending_client_requests--;
 
   // add response message to cache
-  map<int, string>::iterator request_it = mstate.request_map.find(resp_tag);
-  if (request_it != mstate.request_map.end()) {
-    string request_string = request_it->second;
-    mstate.request_cache[request_string] = resp;
-  } else {
-    DLOG(INFO) << "Cannot find tag" << endl;
-  }
-  mstate.request_map.erase(resp_tag);
+  update_response_cache(resp_tag, resp);
 
   // if request queue is not empty, fetch one more
-  // TODO while
   while (!mstate.request_queue.empty()) {
     Request_msg client_req = mstate.request_queue.front();
     mstate.request_queue.pop();
     Client_handle client_handle = get_client_handle(client_req.get_tag());
-    // TODO
     if (check_cache(client_handle, client_req)) {
       continue;
     }
-    map<Worker_handle,Info>::iterator info_it 
-        = mstate.worker_info.find(worker_handle);
-    Info info = info_it->second;
+    Info info = get_worker_info(worker_handle);
     //info.processing_request_num++;
     DLOG(INFO) << "send a request to worker " << info.tag << ", request num: " << info.processing_request_num << endl;
     send_request_to_worker(worker_handle, client_req);
     return;
   }
 
-  map<Worker_handle,Info>::iterator info_it = mstate.worker_info.find(worker_handle);
-  if (info_it != mstate.worker_info.end()) {
-    Info info = info_it->second;
-    info.processing_request_num--;
-    if (info.processing_request_num == 0) {
-      info.state = FREE;
-      mstate.working_workers.remove(worker_handle);
-      // add to free workers list
-      mstate.free_workers.push(worker_handle);
-      DLOG(INFO) << "Add worker " << info.tag << " to free queue" << endl;
-      DLOG(INFO) << "free workers num: " << mstate.free_workers.size() << endl;
-      DLOG(INFO) << "working workers num: " << mstate.working_workers.size() << endl;
-      DLOG(INFO) << "full workers num: " << mstate.busy_workers.size() << endl;
-    } else if (info.processing_request_num == THREAD_NUM - 1) {
-      info.state = WORKING;
-      mstate.busy_workers.remove(worker_handle);
-      mstate.working_workers.insert(mstate.working_workers.begin(), worker_handle);
-    }
-    mstate.worker_info[worker_handle] = info;
-  } else {
-    DLOG(INFO) << "Cannot find worker info" << endl;
+  Info info = get_worker_info(worker_handle);
+  info.processing_request_num--;
+  if (info.processing_request_num == 0) {
+    info.state = FREE;
+    mstate.working_workers.remove(worker_handle);
+    // add to free workers list
+    mstate.free_workers.push(worker_handle);
+#ifdef DEBUG
+    DLOG(INFO) << "Add worker " << info.tag << " to free queue" << endl;
+    print_worker_queue_info();
+#endif
+  } else if (info.processing_request_num == THREAD_NUM - 1) {
+    info.state = WORKING;
+    mstate.busy_workers.remove(worker_handle);
+    mstate.working_workers.insert(mstate.working_workers.begin(), worker_handle);
+#ifdef DEBUG
+    DLOG(INFO) << "Add worker " << info.tag << " to working queue" << endl;
+    print_worker_queue_info();
+#endif
   }
+  mstate.worker_info[worker_handle] = info;
 
 }
 
@@ -208,13 +191,6 @@ void handle_client_request(Client_handle client_handle, const Request_msg& clien
   int tag = mstate.next_tag++;
   mstate.waiting_client[tag] = client_handle;
   mstate.request_map[tag] = client_req.get_request_string();
-#ifdef DEBUG
-  DLOG(INFO) << "add request" << endl;
-  for (std::map<int,Client_handle>::iterator it=mstate.waiting_client.begin(); 
-          it!=mstate.waiting_client.end(); ++it) {
-    DLOG(INFO) << it->first << " => " << it->second << endl;
-  }
-#endif
   mstate.num_pending_client_requests++;
 
   // Fire off the request to the worker.  Eventually the worker will
@@ -223,17 +199,10 @@ void handle_client_request(Client_handle client_handle, const Request_msg& clien
   Request_msg worker_req(tag, client_req);
 
   // First assign requests to workers that is already processing requests. 
-  map<Worker_handle,Info>::iterator info_it;
   if (!mstate.working_workers.empty()) {
     Worker_handle worker = mstate.working_workers.front();
     // update info
-    info_it = mstate.worker_info.find(worker);
-#ifdef DEBUG
-    if (info_it == mstate.worker_info.end()) {
-      DLOG(INFO) << "Cannot find worker info" << endl;
-    }
-#endif
-    Info info = info_it->second;
+    Info info = get_worker_info(worker);
     info.processing_request_num++;
     // if the worker has max processing requests
     if (info.processing_request_num == THREAD_NUM) {
@@ -241,10 +210,10 @@ void handle_client_request(Client_handle client_handle, const Request_msg& clien
       // add to busy workers
       mstate.working_workers.remove(worker);
       mstate.busy_workers.push_back(worker);
+#ifdef DEBUG
       DLOG(INFO) << "Add worker " << info.tag << " to busy queue" << endl;
-      DLOG(INFO) << "free workers num: " << mstate.free_workers.size() << endl;
-      DLOG(INFO) << "working workers num: " << mstate.working_workers.size() << endl;
-      DLOG(INFO) << "full workers num: " << mstate.busy_workers.size() << endl;
+      print_worker_queue_info();
+#endif
     }
     mstate.worker_info[worker] = info;
     // send request
@@ -257,22 +226,16 @@ void handle_client_request(Client_handle client_handle, const Request_msg& clien
     Worker_handle worker = mstate.free_workers.front();
     mstate.free_workers.pop();
     // update info
-    info_it = mstate.worker_info.find(worker);
-#ifdef DEBUG
-    if (info_it == mstate.worker_info.end()) {
-      DLOG(INFO) << "Cannot find worker info" << endl;
-    }
-#endif
-    Info info = info_it->second;
+    Info info = get_worker_info(worker);
     info.processing_request_num++;
     info.state = WORKING;
     mstate.worker_info[worker] = info;
     // add to working workers list
     mstate.working_workers.push_back(worker);
+#ifdef DEBUG
     DLOG(INFO) << "Add worker " << info.tag << " to working queue" << endl;
-    DLOG(INFO) << "free workers num: " << mstate.free_workers.size() << endl;
-    DLOG(INFO) << "working workers num: " << mstate.working_workers.size() << endl;
-    DLOG(INFO) << "full workers num: " << mstate.busy_workers.size() << endl;
+    print_worker_queue_info();
+#endif
     // send request
     send_request_to_worker(worker, worker_req);
 
@@ -294,7 +257,9 @@ bool check_cache(Client_handle client_handle, const Request_msg& client_req) {
     // reset tag number
     resp.set_tag(mstate.next_tag++);
     send_client_response(client_handle, resp);
+#ifdef DEBUG
     DLOG(INFO) << "Cache hit: " << client_req.get_request_string() << std::endl;
+#endif
     return true;
   }
   return false; 
@@ -320,6 +285,30 @@ void start_new_worker() {
   }
 }
 
+Info get_worker_info(Worker_handle& worker_handle) {
+  map<Worker_handle,Info>::iterator info_it 
+      = mstate.worker_info.find(worker_handle);
+  Info info = info_it->second;
+  return info;
+}
+
+void update_response_cache(int resp_tag, const Response_msg& resp) {
+  map<int, string>::iterator request_it = mstate.request_map.find(resp_tag);
+  if (request_it != mstate.request_map.end()) {
+    string request_string = request_it->second;
+    mstate.request_cache[request_string] = resp;
+  } else {
+    DLOG(INFO) << "Cannot find tag" << endl;
+  }
+  mstate.request_map.erase(resp_tag);
+}
+
+void print_worker_queue_info() {
+  DLOG(INFO) << "free workers num: " << mstate.free_workers.size() << endl;
+  DLOG(INFO) << "working workers num: " << mstate.working_workers.size() << endl;
+  DLOG(INFO) << "full workers num: " << mstate.busy_workers.size() << endl;
+}
+
 void handle_tick() {
 
   // TODO: you may wish to take action here.  This method is called at
@@ -330,7 +319,8 @@ void handle_tick() {
   if (remaining_power < THREAD_NUM / 2) {
     start_new_worker();
   } else if (remaining_power > THREAD_NUM && 
-          !mstate.free_workers.empty()) {
+          !mstate.free_workers.empty() && 
+          mstate.worker_num > 1) {
     Worker_handle worker_handle = mstate.free_workers.front();
     mstate.free_workers.pop();
     kill_worker_node(worker_handle);
@@ -340,4 +330,3 @@ void handle_tick() {
     DLOG(INFO) << "KILL worker!" << endl;
   }
 }
-
