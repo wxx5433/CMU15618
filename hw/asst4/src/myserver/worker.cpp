@@ -10,7 +10,7 @@
 #include "tools/cycle_timer.h"
 #include "tools/work_queue.h"
 
-const int WORKER_NUM = 24; 
+const int THREAD_NUM = 24; 
 WorkQueue<Request_msg>* request_queue;
 
 void* worker_thread(void* thread_args);
@@ -56,9 +56,9 @@ void worker_node_init(const Request_msg& params) {
   DLOG(INFO) << "**** Initializing worker: " << params.get_arg("name") << " ****\n";
 
   request_queue = new WorkQueue<Request_msg>;
-  pthread_t workers[WORKER_NUM];
+  pthread_t workers[THREAD_NUM];
 
-  for (int i = 0; i < WORKER_NUM; ++i) {
+  for (int i = 0; i < THREAD_NUM; ++i) {
     pthread_create(&workers[i], NULL, worker_thread, NULL);
     pthread_detach(workers[i]);
   }

@@ -3,20 +3,25 @@
 #include <stdlib.h>
 #include <map>
 #include <queue>
-#include <list>
+#include <vector>
+#include <iostream>
+#include <climits>
 
 #include "server/messages.h"
 #include "server/master.h"
 
-//#define DEBUG
+#define DEBUG
 
 using namespace std;
 
-const int THREAD_NUM = 24;
+const int THREAD_NUM = 48;
+const double THRESHOLD = 1.5;
 
 typedef struct {
+    int max_slots;
     int remaining_slots;
     int tag;
+    int processing_project_idea;
 } Info;
 
 static struct Master_state {
@@ -32,8 +37,13 @@ static struct Master_state {
   int num_pending_client_requests;
   int next_tag;
 
+  int next_worker;
+
+  // there is some worker booting now
+  bool starting_worker;
+
   // workers
-  list<Worker_handle> workers;
+  vector<Worker_handle> workers;
   // key: worker handle, value: worker infomation
   map<Worker_handle, Info> worker_info;
 
@@ -45,29 +55,37 @@ static struct Master_state {
   // request cache, key: request string, value: response msg
   map<string, Response_msg> request_cache;
 
+  // project idea queue
+  queue<Request_msg> project_idea_queue;
+  // compute intensive queue
+  queue<Request_msg> compute_intensive_queue;
 } mstate;
 
-inline bool isFreeWorker(Info info);
-inline int get_remaining_power();
 inline Info get_worker_info(Worker_handle);
 inline Client_handle get_client_handle(int tag);
 
 bool check_cache(Client_handle, const Request_msg&);
 void start_new_worker();
 void update_response_cache(int, const Response_msg&);
-void worker_process_request(Worker_handle, Info, const Request_msg&);
 void process_request(const Request_msg&);
+void worker_process_request(Worker_handle, Info, const Request_msg&);
+void process_compute_intensive_request(const Request_msg&);
+int find_project_idea_worker();
+void clear_queue();
+void clear_compute_intensive_queue();
 
 void master_node_init(int max_workers, int& tick_period) {
 
-  // set up tick handler to fire every 5 seconds. (feel free to
-  // configure as you please)
-  tick_period = 2;
+  // set up tick handler to fire every 1 seconds. 
+  tick_period = 1;
 
   mstate.next_tag = 0;
   mstate.worker_num = 0;
   mstate.max_num_workers = max_workers;
   mstate.num_pending_client_requests = 0;
+  
+  mstate.next_worker = 0;
+  mstate.starting_worker = false;
 
   // don't mark the server as ready until the server is ready to go.
   // This is actually when the first worker is up and running, not
@@ -77,20 +95,44 @@ void master_node_init(int max_workers, int& tick_period) {
   start_new_worker();
 }
 
+/*
+ * Start a new worker node
+ */
+void start_new_worker() {
+  if (!mstate.starting_worker 
+          && mstate.worker_num < mstate.max_num_workers) {
+    int tag = mstate.next_tag++;
+    Request_msg req(tag);
+    req.set_arg("name", "my worker " + tag);
+    mstate.starting_worker = true;
+    request_new_worker_node(req);
+  }
+}
+
 /* 
  * 'tag' allows you to identify which worker request 
  * this response corresponds to. 
+ *
+ * Each a worker goes online, check if there is pending requests
  */
 void handle_new_worker_online(Worker_handle worker_handle, int tag) {
-  // add the new worker to free workers queue
   Info info;
-  info.remaining_slots = THREAD_NUM;
+  
+  if (tag == 0) {  // set first worker as special one
+    info.max_slots = THREAD_NUM - 1;
+  } else {
+    info.max_slots = static_cast<int>(THREAD_NUM * THRESHOLD);
+  }
+  info.remaining_slots = info.max_slots;
   info.tag = tag;
+  info.processing_project_idea = -1;
+
   mstate.worker_info[worker_handle] = info;
   mstate.workers.push_back(worker_handle);
   mstate.worker_num++;
+  mstate.starting_worker = false;
 
-  DLOG(INFO) << "worker " << tag << " online!" << endl;
+  DLOG(INFO) << "worker " << tag << " online! num:" << mstate.worker_num << endl;
 
   // Now that a worker is booted, let the system know the server is
   // ready to begin handling client requests.  The test harness will
@@ -99,8 +141,10 @@ void handle_new_worker_online(Worker_handle worker_handle, int tag) {
     server_init_complete();
     mstate.server_ready = true;
   }
-}
 
+  // try to clear queue each time come online
+  clear_queue();
+}
 void handle_worker_response(Worker_handle worker_handle, const Response_msg& resp) {
 
   // Master node has received a response from one of its workers.
@@ -119,9 +163,16 @@ void handle_worker_response(Worker_handle worker_handle, const Response_msg& res
 
   // update worker info
   Info info = get_worker_info(worker_handle);
+  map<int, string>::iterator request_it = mstate.request_map.find(resp_tag);
+  string req_str;
+  if (request_it != mstate.request_map.end()) {
+    req_str = request_it->second;
+  }
+  if (req_str.find("projectidea") != string::npos) {
+    info.processing_project_idea = -1;
+  }
   ++info.remaining_slots;
   mstate.worker_info[worker_handle] = info;
-
 }
 
 void handle_client_request(Client_handle client_handle, const Request_msg& client_req) {
@@ -155,37 +206,84 @@ void handle_client_request(Client_handle client_handle, const Request_msg& clien
   // respond, and your 'handle_worker_response' event handler will be
   // called to forward the worker's response back to the server.
   Request_msg request_msg(tag, client_req);
-  Worker_handle worker_handle = mstate.workers.front();
-  send_request_to_worker(worker_handle, request_msg);
+  
+  process_request(request_msg);
 
-  //process_request(request_msg);
+  /*
+  string cmd = client_req.get_arg("cmd");
+  Worker_handle worker_handle;
+  if (cmd.compare("projectidea") == 0) {
+    int index = find_project_idea_worker();
+    worker_handle = mstate.workers[index];
+    Info info = get_worker_info(worker_handle);
+    info.processing_project_idea = tag;
+    mstate.worker_info[worker_handle] = info;
+  } else {
+    worker_handle = mstate.workers[mstate.next_worker++ % mstate.worker_num];
+  }
+  send_request_to_worker(worker_handle, request_msg);
+  */
+
   // We're done!  This event handler now returns, and the master
   // process calls another one of your handlers when action is
   // required.
 }
 
 void process_request(const Request_msg& request_msg) {
-  int free_worker_num = 0;
+  string cmd = request_msg.get_arg("cmd");
 
-  // first try to assign requests to workers already processing some requests
-  list<Worker_handle>::iterator it;
-  for (it = mstate.workers.begin(); it != mstate.workers.end(); ++it) {
-    Worker_handle worker_handle = *it;
+  // There is always a free slot to process tell me now in worker[0]
+  if (cmd.compare("tellmenow") == 0) {
+    Worker_handle worker_handle = mstate.workers[0];
     Info info = get_worker_info(worker_handle);
-    // ignore free workers first
-    if (info.remaining_slots == THREAD_NUM) {
-      ++free_worker_num;
-      continue;
-    }
-    worker_process_request(worker_handle, info, request_msg); 
+    worker_process_request(worker_handle, info, request_msg);
+  } else if (cmd.compare("project_idea") == 0) {
+    // TODO
+  } else if (cmd.compare("bandwidth") == 0) {
+    // TODO
+  } else if (cmd.compare("compareprimes") == 0) {
+    // TODO
+  } else {  // compute intensive
+    process_compute_intensive_request(request_msg);
   }
+}
 
-  // reach here if there are still requests
-  if (free_worker_num != 0) {
-    for (it = mstate.workers.begin(); it != mstate.workers.end(); ++it) {
-      Worker_handle worker_handle = *it;
-      Info info = get_worker_info(worker_handle);
+void process_compute_intensive_request(const Request_msg& request_msg) {
+  for (int i = 0; i < mstate.worker_num; ++i) {
+    Worker_handle worker_handle = mstate.workers[i];
+    Info info = get_worker_info(worker_handle);
 
+    if (info.remaining_slots > 0) {
+      worker_process_request(worker_handle, info, request_msg); 
+      return;
+    }
+  }
+  // reach here if no slots
+  mstate.compute_intensive_queue.push(request_msg);
+  DLOG(INFO) << "compute intensive queue size: " << mstate.compute_intensive_queue.size() << endl;
+  // ask for a new node
+  if (!mstate.starting_worker) {
+    start_new_worker();
+    DLOG(INFO) << "Starting new worker now" << endl;
+  }
+}
+
+void clear_queue() {
+  // TODO try to clear project idea first
+  clear_compute_intensive_queue();
+}
+
+void clear_compute_intensive_queue() {
+  for (int i = 0; i < mstate.worker_num; ++i) {
+    if (mstate.compute_intensive_queue.empty()) {
+        break;
+    }
+    Worker_handle worker_handle = mstate.workers[i];
+    Info info = get_worker_info(worker_handle);
+    while (!mstate.compute_intensive_queue.empty() &&
+            info.remaining_slots > 0) {
+      Request_msg request_msg = mstate.compute_intensive_queue.front();
+      mstate.compute_intensive_queue.pop();
       worker_process_request(worker_handle, info, request_msg);
     }
   }
@@ -203,7 +301,7 @@ void worker_process_request(Worker_handle worker_handle,
     DLOG(INFO) << "worker " << info.tag << " remaining slots: " << info.remaining_slots << endl;
 #endif
 
-  --info.remaining_slots;
+  info.remaining_slots--;
   mstate.worker_info[worker_handle] = info;
 }
 
@@ -230,24 +328,33 @@ void update_response_cache(int resp_tag, const Response_msg& resp) {
   } else {
     DLOG(INFO) << "Cannot find tag" << endl;
   }
-  mstate.request_map.erase(resp_tag);
-}
-
-void start_new_worker() {
-  if (mstate.worker_num <= mstate.max_num_workers) {
-    int tag = mstate.next_tag++;
-    Request_msg req(tag);
-    req.set_arg("name", "my worker " + tag);
-    request_new_worker_node(req);
-    mstate.worker_num++;
-  }
+  //mstate.request_map.erase(resp_tag);
 }
 
 void handle_tick() {
+  // clear queue first
+  clear_queue();
 
-  // TODO: you may wish to take action here.  This method is called at
-  // fixed time intervals, according to how you set 'tick_period' in
-  // 'master_node_init'.
+  // add node if needed
+  if (mstate.worker_num < mstate.max_num_workers 
+          && (!mstate.compute_intensive_queue.empty() 
+          || !mstate.project_idea_queue.empty())) {
+    start_new_worker();
+  }
+  
+  // kill node if its is free
+  for (int i = 1; i < mstate.worker_num; ++i) {
+    Worker_handle worker_handle = mstate.workers[i];
+    Info info = get_worker_info(worker_handle);
+    if (info.remaining_slots == info.max_slots) {
+      mstate.workers.erase(mstate.workers.begin() + i);
+      mstate.worker_info.erase(worker_handle);
+      kill_worker_node(worker_handle);
+      mstate.worker_num--;
+      DLOG(INFO) << "KILL worker!" << endl;
+    }
+  }
+
   /*
   int remaining_power = get_remaining_power();
   if (!mstate.request_queue.empty() && 
@@ -296,14 +403,22 @@ inline Info get_worker_info(Worker_handle worker_handle) {
   return info;
 }
 
-inline bool isFreeWorker(Info info) {
-  if (info.remaining_slots == THREAD_NUM) {
-    return true;
+int find_project_idea_worker() {
+  int min_tag = INT_MAX;
+  int min_index = 0;
+  for (int i = 0; i < mstate.worker_num; ++i) {
+    Worker_handle worker_handle = mstate.workers[i];
+    Info info = get_worker_info(worker_handle);
+    if (info.processing_project_idea == -1) {
+      cout << "index: " << i << endl;
+      return i;
+      //min_index = i;
+      //break;
+    } else if (info.processing_project_idea < min_tag) {
+      min_tag = info.processing_project_idea;
+      min_index = i;
+    }
   }
-  return false;
-}
-
-inline int get_remaining_power() {
-  return mstate.worker_num * THREAD_NUM 
-      - mstate.num_pending_client_requests;
+  cout << "SHITTTTTT: " << min_index << endl;
+  return min_index;
 }
