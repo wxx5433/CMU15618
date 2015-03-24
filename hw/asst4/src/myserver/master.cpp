@@ -14,7 +14,7 @@
 
 using namespace std;
 
-const int THREAD_NUM = 48;
+const int THREAD_NUM = 24;
 const double THRESHOLD = 1.5;
 
 typedef struct {
@@ -132,7 +132,7 @@ void handle_new_worker_online(Worker_handle worker_handle, int tag) {
   mstate.worker_num++;
   mstate.starting_worker = false;
 
-  DLOG(INFO) << "worker " << tag << " online! num:" << mstate.worker_num << endl;
+  DLOG(INFO) << "worker " << tag << " online! slots:" << info.max_slots << endl;
 
   // Now that a worker is booted, let the system know the server is
   // ready to begin handling client requests.  The test harness will
@@ -172,12 +172,13 @@ void handle_worker_response(Worker_handle worker_handle, const Response_msg& res
     info.processing_project_idea = -1;
   }
   ++info.remaining_slots;
+  DLOG(INFO) << "add slot, worker " << info.tag<< " remaining slots: " << info.remaining_slots << endl;
   mstate.worker_info[worker_handle] = info;
 }
 
 void handle_client_request(Client_handle client_handle, const Request_msg& client_req) {
 
-  DLOG(INFO) << "Received request: " << client_req.get_request_string() << std::endl;
+  DLOG(INFO) << "Received request " << mstate.next_tag << ": " << client_req.get_request_string() << std::endl;
 
   // check cache
   if (check_cache(client_handle, client_req)) {
@@ -260,7 +261,7 @@ void process_compute_intensive_request(const Request_msg& request_msg) {
   }
   // reach here if no slots
   mstate.compute_intensive_queue.push(request_msg);
-  DLOG(INFO) << "compute intensive queue size: " << mstate.compute_intensive_queue.size() << endl;
+  DLOG(INFO) << "add request " << request_msg.get_tag() << "to queue, size: " << mstate.compute_intensive_queue.size() << endl;
   // ask for a new node
   if (!mstate.starting_worker) {
     start_new_worker();
@@ -270,7 +271,10 @@ void process_compute_intensive_request(const Request_msg& request_msg) {
 
 void clear_queue() {
   // TODO try to clear project idea first
-  clear_compute_intensive_queue();
+  
+  if (!mstate.compute_intensive_queue.empty()) {
+    clear_compute_intensive_queue();
+  }
 }
 
 void clear_compute_intensive_queue() {
@@ -297,12 +301,12 @@ void worker_process_request(Worker_handle worker_handle,
         Info info, const Request_msg& worker_req) {
   // send request
   send_request_to_worker(worker_handle, worker_req);
-#ifdef DEBUG
-    DLOG(INFO) << "worker " << info.tag << " remaining slots: " << info.remaining_slots << endl;
-#endif
-
   info.remaining_slots--;
   mstate.worker_info[worker_handle] = info;
+
+#ifdef DEBUG
+    DLOG(INFO) << "send request " << worker_req.get_tag() << " to worker " << info.tag << " remaining slots: " << info.remaining_slots << endl;
+#endif
 }
 
 bool check_cache(Client_handle client_handle, const Request_msg& client_req) {
@@ -313,7 +317,7 @@ bool check_cache(Client_handle client_handle, const Request_msg& client_req) {
     resp.set_tag(mstate.next_tag++);
     send_client_response(client_handle, resp);
 #ifdef DEBUG
-    DLOG(INFO) << "Cache hit: " << client_req.get_request_string() << std::endl;
+    DLOG(INFO) << "Cache hit: " << resp.get_tag() << std::endl;
 #endif
     return true;
   }
@@ -328,10 +332,10 @@ void update_response_cache(int resp_tag, const Response_msg& resp) {
   } else {
     DLOG(INFO) << "Cannot find tag" << endl;
   }
-  //mstate.request_map.erase(resp_tag);
 }
 
 void handle_tick() {
+  DLOG(INFO) << "Queue length: " << mstate.compute_intensive_queue.size() << endl;
   // clear queue first
   clear_queue();
 
@@ -343,47 +347,20 @@ void handle_tick() {
   }
   
   // kill node if its is free
-  for (int i = 1; i < mstate.worker_num; ++i) {
-    Worker_handle worker_handle = mstate.workers[i];
+  vector<Worker_handle>::iterator it = mstate.workers.begin() + 1;
+  while (it != mstate.workers.end()) {
+    Worker_handle worker_handle = *it;
     Info info = get_worker_info(worker_handle);
     if (info.remaining_slots == info.max_slots) {
-      mstate.workers.erase(mstate.workers.begin() + i);
+      it = mstate.workers.erase(it);
       mstate.worker_info.erase(worker_handle);
       kill_worker_node(worker_handle);
       mstate.worker_num--;
-      DLOG(INFO) << "KILL worker!" << endl;
+      DLOG(INFO) << "KILL worker " << info.tag <<  "!" << endl;
+    } else {
+      ++it;
     }
   }
-
-  /*
-  int remaining_power = get_remaining_power();
-  if (!mstate.request_queue.empty() && 
-          remaining_power <= THREAD_NUM / 2) {
-    int need_worker_num = (mstate.request_queue.size()
-            + THREAD_NUM - 1) / THREAD_NUM;
-    need_worker_num = max(1, need_worker_num);
-
-    for (int i = 0; i < need_worker_num; ++i) {
-      start_new_worker();
-    }
-  } else { 
-    list<Worker_handle>::iterator it = mstate.workers.begin(); 
-    while (it != mstate.workers.end() && mstate.worker_num > 2
-            && get_remaining_power() > THREAD_NUM / 2 ) {
-      Worker_handle worker_handle = *it;
-      Info info = get_worker_info(worker_handle);
-      if (isFreeWorker(info)) {
-        it = mstate.workers.erase(it);
-        mstate.worker_num--;
-        mstate.worker_info.erase(worker_handle);
-        kill_worker_node(worker_handle);
-        DLOG(INFO) << "KILL worker!" << endl;
-      } else {
-        ++it;
-      }
-    }
-  }
-  */
 }
 
 inline Client_handle get_client_handle(int tag) {
@@ -399,6 +376,11 @@ inline Client_handle get_client_handle(int tag) {
 inline Info get_worker_info(Worker_handle worker_handle) {
   map<Worker_handle,Info>::iterator info_it 
       = mstate.worker_info.find(worker_handle);
+#ifdef DEBUG
+  if (info_it == mstate.worker_info.end()) {
+    DLOG(INFO) << "CANNOT FIND INFO" << endl;
+  }
+#endif
   Info info = info_it->second;
   return info;
 }
