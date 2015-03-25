@@ -15,7 +15,7 @@
 using namespace std;
 
 const int THREAD_NUM = 24;
-const double THRESHOLD = 1.5;
+const double THRESHOLD = 1.8;
 //const int THREAD_NUM = 2;
 //const double THRESHOLD = 1;
 
@@ -75,6 +75,8 @@ void process_compute_intensive_request(const Request_msg&);
 int find_project_idea_worker();
 void clear_queue();
 void clear_compute_intensive_queue();
+void clear_project_idea_queue();
+void process_project_idea_request(const Request_msg&);
 
 void master_node_init(int max_workers, int& tick_period) {
 
@@ -121,7 +123,8 @@ void handle_new_worker_online(Worker_handle worker_handle, int tag) {
   Info info;
   
   if (tag == 0) {  // set first worker as special one
-    info.max_slots = THREAD_NUM - 1;
+    //info.max_slots = THREAD_NUM - 1;
+    info.max_slots = static_cast<int>(THREAD_NUM * THRESHOLD);
   } else {
     info.max_slots = static_cast<int>(THREAD_NUM * THRESHOLD);
   }
@@ -172,13 +175,16 @@ void handle_worker_response(Worker_handle worker_handle, const Response_msg& res
   }
   if (req_str.find("projectidea") != string::npos) {
     info.processing_project_idea = false;
+    // try to fetch another project idea
+    clear_project_idea_queue();
   }
   ++info.remaining_slots;
   DLOG(INFO) << "add slot, worker " << info.tag<< " remaining slots: " << info.remaining_slots << endl;
   mstate.worker_info[worker_handle] = info;
 
   // try to clear queue
-  clear_queue();
+  // TODO may cause kill worker problem
+  clear_compute_intensive_queue();
 }
 
 void handle_client_request(Client_handle client_handle, const Request_msg& client_req) {
@@ -215,21 +221,6 @@ void handle_client_request(Client_handle client_handle, const Request_msg& clien
   
   process_request(request_msg);
 
-  /*
-  string cmd = client_req.get_arg("cmd");
-  Worker_handle worker_handle;
-  if (cmd.compare("projectidea") == 0) {
-    int index = find_project_idea_worker();
-    worker_handle = mstate.workers[index];
-    Info info = get_worker_info(worker_handle);
-    info.processing_project_idea = tag;
-    mstate.worker_info[worker_handle] = info;
-  } else {
-    worker_handle = mstate.workers[mstate.next_worker++ % mstate.worker_num];
-  }
-  send_request_to_worker(worker_handle, request_msg);
-  */
-
   // We're done!  This event handler now returns, and the master
   // process calls another one of your handlers when action is
   // required.
@@ -244,7 +235,7 @@ void process_request(const Request_msg& request_msg) {
     Info info = get_worker_info(worker_handle);
     worker_process_request(worker_handle, info, request_msg);
   } else if (cmd.compare("project_idea") == 0) {
-    // TODO
+    process_project_idea_request(request_msg);
   } else if (cmd.compare("compareprimes") == 0) {
     // TODO
   } else {  // compute intensive
@@ -272,24 +263,29 @@ void process_compute_intensive_request(const Request_msg& request_msg) {
   }
 }
 
-void process_project_idea_request() {
+void process_project_idea_request(const Request_msg& request_msg) {
   // first try to assign to a worker 
   for (int i = 0; i < mstate.worker_num; ++i) {
     Worker_handle worker_handle = mstate.workers[i];
     Info info = get_worker_info(worker_handle);
     if (!info.processing_project_idea) {
-      cout << "index: " << i << endl;
-      return i;
-    } else if (info.processing_project_idea < min_tag) {
-      min_tag = info.processing_project_idea;
-      min_index = i;
+      worker_process_request(worker_handle, info, request_msg); 
+#ifdef DEGUB
+      DLOG(INFO) << "send project idea request to worker " << info.tag << endl;
+#endif
+    } else {
+      mstate.project_idea_queue.push(request_msg);
+#ifdef DEGUB
+      DLOG(INFO) << "send project idea request " << request_msg.get_tag() << " to queue, size: " << mstate.project_idea_queue.size() << endl;
+#endif
     }
   }
 }
 
 void clear_queue() {
-  // TODO try to clear project idea first
-  
+  if (!mstate.project_idea_queue.empty()) {
+    clear_project_idea_queue();
+  }
   if (!mstate.compute_intensive_queue.empty()) {
     clear_compute_intensive_queue();
   }
@@ -305,6 +301,22 @@ void clear_compute_intensive_queue() {
     while (!mstate.compute_intensive_queue.empty() &&
             info.remaining_slots > 0) {
       Request_msg request_msg = mstate.compute_intensive_queue.front();
+      mstate.compute_intensive_queue.pop();
+      worker_process_request(worker_handle, info, request_msg);
+    }
+  }
+}
+
+void clear_project_idea_queue() {
+  for (int i = 0; i < mstate.worker_num; ++i) {
+    if (mstate.project_idea_queue.empty()) {
+        break;
+    }
+    Worker_handle worker_handle = mstate.workers[i];
+    Info info = get_worker_info(worker_handle);
+    while (!mstate.project_idea_queue.empty() &&
+            !info.processing_project_idea) {
+      Request_msg request_msg = mstate.project_idea_queue.front();
       mstate.compute_intensive_queue.pop();
       worker_process_request(worker_handle, info, request_msg);
     }
