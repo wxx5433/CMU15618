@@ -16,12 +16,14 @@ using namespace std;
 
 const int THREAD_NUM = 24;
 const double THRESHOLD = 1.5;
+//const int THREAD_NUM = 2;
+//const double THRESHOLD = 1;
 
 typedef struct {
     int max_slots;
     int remaining_slots;
     int tag;
-    int processing_project_idea;
+    bool processing_project_idea;
 } Info;
 
 static struct Master_state {
@@ -63,12 +65,12 @@ static struct Master_state {
 
 inline Info get_worker_info(Worker_handle);
 inline Client_handle get_client_handle(int tag);
+inline void worker_process_request(Worker_handle, Info&, const Request_msg&);
 
 bool check_cache(Client_handle, const Request_msg&);
 void start_new_worker();
 void update_response_cache(int, const Response_msg&);
 void process_request(const Request_msg&);
-void worker_process_request(Worker_handle, Info, const Request_msg&);
 void process_compute_intensive_request(const Request_msg&);
 int find_project_idea_worker();
 void clear_queue();
@@ -125,14 +127,14 @@ void handle_new_worker_online(Worker_handle worker_handle, int tag) {
   }
   info.remaining_slots = info.max_slots;
   info.tag = tag;
-  info.processing_project_idea = -1;
+  info.processing_project_idea = false;
 
   mstate.worker_info[worker_handle] = info;
   mstate.workers.push_back(worker_handle);
   mstate.worker_num++;
   mstate.starting_worker = false;
 
-  DLOG(INFO) << "worker " << tag << " online! slots:" << info.max_slots << endl;
+  DLOG(INFO) << "worker " << tag << " online! slots:" << info.max_slots << " total worker num: " << mstate.worker_num << endl;
 
   // Now that a worker is booted, let the system know the server is
   // ready to begin handling client requests.  The test harness will
@@ -169,11 +171,14 @@ void handle_worker_response(Worker_handle worker_handle, const Response_msg& res
     req_str = request_it->second;
   }
   if (req_str.find("projectidea") != string::npos) {
-    info.processing_project_idea = -1;
+    info.processing_project_idea = false;
   }
   ++info.remaining_slots;
   DLOG(INFO) << "add slot, worker " << info.tag<< " remaining slots: " << info.remaining_slots << endl;
   mstate.worker_info[worker_handle] = info;
+
+  // try to clear queue
+  clear_queue();
 }
 
 void handle_client_request(Client_handle client_handle, const Request_msg& client_req) {
@@ -240,8 +245,6 @@ void process_request(const Request_msg& request_msg) {
     worker_process_request(worker_handle, info, request_msg);
   } else if (cmd.compare("project_idea") == 0) {
     // TODO
-  } else if (cmd.compare("bandwidth") == 0) {
-    // TODO
   } else if (cmd.compare("compareprimes") == 0) {
     // TODO
   } else {  // compute intensive
@@ -266,6 +269,21 @@ void process_compute_intensive_request(const Request_msg& request_msg) {
   if (!mstate.starting_worker) {
     start_new_worker();
     DLOG(INFO) << "Starting new worker now" << endl;
+  }
+}
+
+void process_project_idea_request() {
+  // first try to assign to a worker 
+  for (int i = 0; i < mstate.worker_num; ++i) {
+    Worker_handle worker_handle = mstate.workers[i];
+    Info info = get_worker_info(worker_handle);
+    if (!info.processing_project_idea) {
+      cout << "index: " << i << endl;
+      return i;
+    } else if (info.processing_project_idea < min_tag) {
+      min_tag = info.processing_project_idea;
+      min_index = i;
+    }
   }
 }
 
@@ -297,8 +315,8 @@ void clear_compute_intensive_queue() {
  * @brief Process request by the specific worker
  * Return the number of pending request
  */
-void worker_process_request(Worker_handle worker_handle, 
-        Info info, const Request_msg& worker_req) {
+inline void worker_process_request(Worker_handle worker_handle, 
+        Info& info, const Request_msg& worker_req) {
   // send request
   send_request_to_worker(worker_handle, worker_req);
   info.remaining_slots--;
@@ -330,7 +348,7 @@ void update_response_cache(int resp_tag, const Response_msg& resp) {
     string request_string = request_it->second;
     mstate.request_cache[request_string] = resp;
   } else {
-    DLOG(INFO) << "Cannot find tag" << endl;
+    DLOG(ERROR) << "Cannot find tag" << endl;
   }
 }
 
@@ -346,11 +364,18 @@ void handle_tick() {
     start_new_worker();
   }
   
+  if (mstate.workers.empty()) {
+    DLOG(INFO) << "no worker yet" << endl;
+    return;
+  }
+
   // kill node if its is free
   vector<Worker_handle>::iterator it = mstate.workers.begin() + 1;
   while (it != mstate.workers.end()) {
     Worker_handle worker_handle = *it;
     Info info = get_worker_info(worker_handle);
+    DLOG(INFO) << "worker tag: " << info.tag << " remaining_slots: " <<
+        info.remaining_slots << endl;
     if (info.remaining_slots == info.max_slots) {
       it = mstate.workers.erase(it);
       mstate.worker_info.erase(worker_handle);
@@ -367,7 +392,7 @@ inline Client_handle get_client_handle(int tag) {
   map<int,Client_handle>::iterator client_it = mstate.waiting_client.find(tag);
 #ifdef DEBUG
   if (client_it == mstate.waiting_client.end()) {
-    DLOG(INFO) << "Cannot find client" << endl;
+    DLOG(ERROR) << "Cannot find client" << endl;
   }
 #endif
   return client_it->second;
@@ -378,29 +403,10 @@ inline Info get_worker_info(Worker_handle worker_handle) {
       = mstate.worker_info.find(worker_handle);
 #ifdef DEBUG
   if (info_it == mstate.worker_info.end()) {
-    DLOG(INFO) << "CANNOT FIND INFO" << endl;
+    DLOG(ERROR) << "CANNOT FIND INFO" << endl;
   }
 #endif
   Info info = info_it->second;
   return info;
 }
 
-int find_project_idea_worker() {
-  int min_tag = INT_MAX;
-  int min_index = 0;
-  for (int i = 0; i < mstate.worker_num; ++i) {
-    Worker_handle worker_handle = mstate.workers[i];
-    Info info = get_worker_info(worker_handle);
-    if (info.processing_project_idea == -1) {
-      cout << "index: " << i << endl;
-      return i;
-      //min_index = i;
-      //break;
-    } else if (info.processing_project_idea < min_tag) {
-      min_tag = info.processing_project_idea;
-      min_index = i;
-    }
-  }
-  cout << "SHITTTTTT: " << min_index << endl;
-  return min_index;
-}
