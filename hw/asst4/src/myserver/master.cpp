@@ -25,6 +25,12 @@ typedef struct {
     bool processing_project_idea;
 } Info;
 
+typedef struct {
+    int tag;
+    int n[4];
+    int count; // count how many count primes have returned from worker
+} compPrime;
+
 static struct Master_state {
 
   // The mstate struct collects all the master node state into one
@@ -55,6 +61,11 @@ static struct Master_state {
 
   // key: request tag, value: request string 
   map<int, string> request_map;
+  
+  // key: request tag, value: compPrime
+  // handles comparePrimes request
+  map<int, compPrime*> prime_map;
+
   // request cache, key: request string, value: response msg
   map<string, Response_msg> request_cache;
 
@@ -81,6 +92,8 @@ int find_project_idea_worker();
 void clear_queue();
 void clear_compute_intensive_queue();
 void clear_project_idea_queue();
+void process_compare_primes(const Request_msg&);
+void create_computeprimes_req(Request_msg& req, int n);
 void process_project_idea_request(const Request_msg&);
 bool check_processing_cache(const string&, int tag);
 void update_processing_cache(const string&, int tag);
@@ -171,10 +184,41 @@ void handle_worker_response(Worker_handle worker_handle, const Response_msg& res
 
   // send response to client
   int resp_tag = resp.get_tag();
-  Client_handle client_handle = get_client_handle(resp_tag);
-  send_client_response(client_handle, resp);
-  mstate.num_pending_client_requests--;
+  map<int, compPrime*>::iterator prime_it = mstate.prime_map.find(resp_tag);
+  // find a pending comp prime request
+  if (prime_it != mstate.prime_map.end()) {
+    compPrime* cp = prime_it -> second;
+    cp -> count++;
+    int index = resp_tag - cp -> tag - 1;
+    int result = atoi(resp.get_response().c_str());
+    cp -> n[index] = result;
+    if (cp -> count == 4) {
+      Response_msg response;
+      response.set_tag(cp -> tag);
+      int first = cp -> n[1] - cp -> n[0];
+      int second = cp -> n[3] - cp -> n[2];
+      if (first > second) {
+        response.set_response("There are more primes in first range.");
+      } else {
+        response.set_response("There are more primes in second range.");
+      }
+      Client_handle client_handle = get_client_handle(cp -> tag);
+      send_client_response(client_handle, response);
+    } else {
+      update_cache(resp_tag, resp);
+      Info info = get_worker_info(worker_handle);
+      ++info.remaining_slots;
+      //DLOG(INFO) << "add slot, worker " << info.tag<< " remaining slots: " << info.remaining_slots << endl;
+      mstate.worker_info[worker_handle] = info;
+      clear_queue();
+      return;
+    }
+  } else { 
 
+     Client_handle client_handle = get_client_handle(resp_tag);
+     send_client_response(client_handle, resp);
+     mstate.num_pending_client_requests--;
+  }
   // add response message to cache
   update_cache(resp_tag, resp);
 
@@ -267,10 +311,63 @@ void process_request(const Request_msg& request_msg) {
     DLOG(INFO) << "process project idea" << endl;
     process_project_idea_request(request_msg);
   } else if (cmd.compare("compareprimes") == 0) {
-    // TODO
+    process_compare_primes(request_msg);
   } else {  // compute intensive
     process_compute_intensive_request(request_msg);
   }
+}
+
+void process_compare_primes(const Request_msg& request_msg) {
+  int tag = request_msg.get_tag();
+  int params[4];
+
+  params[0] = atoi(request_msg.get_arg("n1").c_str());
+  params[1] = atoi(request_msg.get_arg("n2").c_str());
+  params[2] = atoi(request_msg.get_arg("n3").c_str());
+  params[3] = atoi(request_msg.get_arg("n4").c_str());
+
+  compPrime* cp = new compPrime();
+  cp->tag = tag;
+  
+  for (int j = 0; j < 4; ++j) {
+    cp -> n[j] = params[j];
+  }
+  cp -> count = 0;
+
+  int index1 = tag + 1;
+  int index2 = tag + 2;
+  int index3 = tag + 3;
+  int index4 = tag + 4;
+
+  mstate.prime_map[index1] = cp;
+  mstate.prime_map[index2] = cp;
+  mstate.prime_map[index3] = cp;
+  mstate.prime_map[index4] = cp;
+
+  for (int i = 0; i < 4; ++i) {
+    Request_msg dummy_req(mstate.next_tag++);
+    create_computeprimes_req(dummy_req, params[i]);
+    map<string, Response_msg>::iterator request_it = mstate.request_cache.find(dummy_req.get_request_string());
+    
+    // if countprime(n) is in cache
+    if (request_it != mstate.request_cache.end()) {
+      Response_msg resp = request_it->second;
+      int result = atoi(resp.get_response().c_str());
+      cp->n[i] = result;
+      cp->count++;
+    } else {
+      mstate.request_map[dummy_req.get_tag()] = dummy_req.get_request_string();
+      process_compute_intensive_request(dummy_req);
+    }
+
+  }
+}
+
+void create_computeprimes_req(Request_msg& req, int n) {
+  std::ostringstream oss;
+  oss << n;
+  req.set_arg("cmd", "countprimes");
+  req.set_arg("n", oss.str());
 }
 
 void process_compute_intensive_request(const Request_msg& request_msg) {
@@ -553,4 +650,3 @@ inline Info get_worker_info(Worker_handle worker_handle) {
   Info info = info_it->second;
   return info;
 }
-
