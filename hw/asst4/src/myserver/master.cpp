@@ -108,7 +108,7 @@ void start_new_worker() {
           && mstate.worker_num < mstate.max_num_workers) {
     int tag = mstate.next_tag++;
     Request_msg req(tag);
-    req.set_arg("name", "my worker " + tag);
+    req.set_arg("tag", "" + tag);
     mstate.starting_worker = true;
     request_new_worker_node(req);
   }
