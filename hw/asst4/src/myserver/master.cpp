@@ -58,6 +58,10 @@ static struct Master_state {
   // request cache, key: request string, value: response msg
   map<string, Response_msg> request_cache;
 
+  // This map is used to avoid sending the same request to worker while it is processing by worker
+  // key: processing request, value: list of tag that has the same request string
+  map<string, vector<int>> processing_cache;
+
   // project idea queue
   queue<Request_msg> project_idea_queue;
   // compute intensive queue
@@ -70,7 +74,7 @@ inline void worker_process_request(Worker_handle, Info&, const Request_msg&);
 
 bool check_cache(Client_handle, const Request_msg&);
 void start_new_worker();
-void update_response_cache(int, const Response_msg&);
+void update_cache(int, const Response_msg&);
 void process_request(const Request_msg&);
 void process_compute_intensive_request(const Request_msg&);
 int find_project_idea_worker();
@@ -78,6 +82,9 @@ void clear_queue();
 void clear_compute_intensive_queue();
 void clear_project_idea_queue();
 void process_project_idea_request(const Request_msg&);
+bool check_processing_cache(const string&, int tag);
+void update_processing_cache(const string&, int tag);
+void forward_response(const string&, const Response_msg&);
 
 void master_node_init(int max_workers, int& tick_period) {
   // set up tick handler to fire every 1 seconds. 
@@ -169,15 +176,18 @@ void handle_worker_response(Worker_handle worker_handle, const Response_msg& res
   mstate.num_pending_client_requests--;
 
   // add response message to cache
-  update_response_cache(resp_tag, resp);
+  update_cache(resp_tag, resp);
 
-  // update worker info
-  Info info = get_worker_info(worker_handle);
+  // check processing cache, if exist, forward it to all clients
   map<int, string>::iterator request_it = mstate.request_map.find(resp_tag);
   string req_str;
   if (request_it != mstate.request_map.end()) {
     req_str = request_it->second;
   }
+  forward_response(req_str, resp);
+
+  // update worker info
+  Info info = get_worker_info(worker_handle);
   if (req_str.find("projectidea") != string::npos) {
     DLOG(INFO) << "receive project idea response" << endl;
     info.processing_project_idea = false;
@@ -223,6 +233,14 @@ void handle_client_request(Client_handle client_handle, const Request_msg& clien
   mstate.waiting_client[tag] = client_handle;
   mstate.request_map[tag] = client_req.get_request_string();
   mstate.num_pending_client_requests++;
+
+  // check processing request map, to avoid resending the same request
+  string req_str = client_req.get_request_string();
+  if (check_processing_cache(req_str, tag)) {
+    return;
+  }
+  // update processing request map
+  update_processing_cache(req_str, tag);
 
   // Fire off the request to the worker.  Eventually the worker will
   // respond, and your 'handle_worker_response' event handler will be
@@ -373,6 +391,7 @@ bool check_cache(Client_handle client_handle, const Request_msg& client_req) {
     Response_msg resp = request_it->second;
     // reset tag number
     resp.set_tag(mstate.next_tag++);
+
     send_client_response(client_handle, resp);
 #ifdef DEBUG
     DLOG(INFO) << "Cache hit: " << resp.get_tag() << std::endl;
@@ -382,7 +401,7 @@ bool check_cache(Client_handle client_handle, const Request_msg& client_req) {
   return false; 
 }
 
-void update_response_cache(int resp_tag, const Response_msg& resp) {
+void update_cache(int resp_tag, const Response_msg& resp) {
   map<int, string>::iterator request_it = mstate.request_map.find(resp_tag);
   if (request_it != mstate.request_map.end()) {
     string request_string = request_it->second;
@@ -390,6 +409,51 @@ void update_response_cache(int resp_tag, const Response_msg& resp) {
   } else {
     DLOG(ERROR) << "Cannot find tag" << endl;
   }
+}
+
+bool check_processing_cache(const string& req_str, int tag) {
+  map<string, vector<int>>::iterator request_it = mstate.processing_cache.find(req_str);
+  if (request_it != mstate.processing_cache.end()) {
+    vector<int> tags = request_it->second;
+    tags.push_back(tag);
+    mstate.processing_cache[req_str] = tags;
+#ifdef DEBUG
+    DLOG(INFO) << "processing request: " << tag << std::endl;
+#endif
+    return true;
+  }
+  return false; 
+}
+
+void forward_response(const string& req_str, const Response_msg& old_resp) {
+  map<string, vector<int>>::iterator request_it = mstate.processing_cache.find(req_str);
+  if (request_it != mstate.processing_cache.end()) {
+    vector<int> tags = request_it->second;
+    for (size_t i = 0; i < tags.size(); ++i) {
+      Response_msg resp(tags[i]);
+      resp.set_response(old_resp.get_response());
+      // get client handle
+      Client_handle client_handle = get_client_handle(tags[i]);
+#ifdef DEBUG
+      DLOG(INFO) << "forward response of tag " << tags[i] << endl;
+#endif
+      // forward the response
+      send_client_response(client_handle, resp);
+    }
+    // delete it!
+    mstate.processing_cache.erase(request_it);
+  }
+}
+
+void update_processing_cache(const string& req_str, int tag) {
+  map<string, vector<int>>::iterator request_it = mstate.processing_cache.find(req_str);
+
+  vector<int> tags;
+  if (request_it != mstate.processing_cache.end()) {
+    tags = request_it->second;
+    tags.push_back(tag);
+  } 
+  mstate.processing_cache[req_str] = tags;
 }
 
 /*
