@@ -24,7 +24,7 @@ void* projectidea_worker_thread(void*);
 inline void do_work(const Request_msg&);
 
 void worker_node_init(const Request_msg& params) {
-  int thread_num = 47;  // plus one project idea thread
+  int thread_num = 30;  // plus one project idea thread
 
   DLOG(INFO) << "**** Initializing worker: " << params.get_arg("tag") << " ****\n";
 
@@ -37,7 +37,7 @@ void worker_node_init(const Request_msg& params) {
     pthread_detach(tellmenow_worker);
 
     // plus one special tellmenow thread
-    thread_num = 46;
+    thread_num = 29;
   }
 
   request_queue = new WorkQueue<Request_msg>;

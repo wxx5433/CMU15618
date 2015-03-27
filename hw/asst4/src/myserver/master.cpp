@@ -15,8 +15,8 @@
 
 using namespace std;
 
-const int THREAD_NUM = 48;
-const double THRESHOLD = 1.2;
+const int THREAD_NUM = 30;
+const double THRESHOLD = 1.5;
 
 typedef struct {
     int max_slots;
@@ -144,7 +144,7 @@ void handle_new_worker_online(Worker_handle worker_handle, int tag) {
   Info info;
   
   if (tag == 0) {  // set first worker as special one
-    info.max_slots = THREAD_NUM - 1;
+    info.max_slots = 35;
   } else {
     info.max_slots = static_cast<int>(THREAD_NUM * THRESHOLD);
   }
@@ -582,9 +582,9 @@ void kill_worker() {
 }
 
 void handle_tick() {
-#ifdef DEBUG
+
   DLOG(INFO) << "Queue length: " << mstate.compute_intensive_queue.size() << endl;
-#endif
+
   // clear queue first
   clear_queue();
 
@@ -597,7 +597,12 @@ void handle_tick() {
           && (!mstate.compute_intensive_queue.empty() 
           || !mstate.project_idea_queue.empty()
           || mstate.processing_project_idea_num == mstate.worker_num)) {
-    start_new_worker();
+     if (mstate.compute_intensive_queue.size() + mstate.project_idea_queue.size() + mstate.processing_project_idea_num >= 12) {
+       start_new_worker();
+       start_new_worker();
+     } else {
+       start_new_worker();
+     }
   }
   
   if (mstate.workers.empty()) {
