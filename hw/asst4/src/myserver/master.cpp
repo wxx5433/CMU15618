@@ -16,7 +16,9 @@
 using namespace std;
 
 const int THREAD_NUM = 30;
-const double THRESHOLD = 1.5;
+const double THRESHOLD = 1.3;
+const double CLOSE_THRESHOLD = 1.3;
+const int CLOSE_NUM= static_cast<int>(THREAD_NUM * THRESHOLD * CLOSE_THRESHOLD);
 
 typedef struct {
     int max_slots;
@@ -50,6 +52,8 @@ static struct Master_state {
 
   // there is some worker booting now
   bool starting_worker;
+
+  int total_remaining_slots;
 
   // workers
   vector<Worker_handle> workers;
@@ -111,6 +115,7 @@ void master_node_init(int max_workers, int& tick_period) {
   //mstate.next_worker = 0;
   mstate.starting_worker = false;
   mstate.processing_project_idea_num = 0;
+  mstate.total_remaining_slots = 0;
 
   // don't mark the server as ready until the server is ready to go.
   // This is actually when the first worker is up and running, not
@@ -156,6 +161,7 @@ void handle_new_worker_online(Worker_handle worker_handle, int tag) {
   mstate.workers.push_back(worker_handle);
   mstate.worker_num++;
   mstate.starting_worker = false;
+  mstate.total_remaining_slots += info.max_slots;
 
 #ifdef PRINT_MESSAGE
   DLOG(INFO) << "worker " << tag << " online! slots:" << info.max_slots << " total worker num: " << mstate.worker_num << endl;
@@ -208,6 +214,7 @@ void handle_worker_response(Worker_handle worker_handle, const Response_msg& res
       update_cache(resp_tag, resp);
       Info info = get_worker_info(worker_handle);
       ++info.remaining_slots;
+      ++mstate.total_remaining_slots;
       //DLOG(INFO) << "add slot, worker " << info.tag<< " remaining slots: " << info.remaining_slots << endl;
       mstate.worker_info[worker_handle] = info;
       clear_queue();
@@ -240,6 +247,7 @@ void handle_worker_response(Worker_handle worker_handle, const Response_msg& res
     clear_project_idea_queue();
   }
   ++info.remaining_slots;
+  ++mstate.total_remaining_slots;
 #ifdef DEBUG
   DLOG(INFO) << "add slot, worker " << info.tag<< " remaining slots: " << info.remaining_slots << endl;
 #endif
@@ -404,7 +412,7 @@ void process_project_idea_request(const Request_msg& request_msg) {
       mstate.processing_project_idea_num++;
       worker_process_request(worker_handle, info, request_msg); 
 #ifdef DEBUG 
-      DLOG(INFO) << "send project idea request to worker " << info.tag << endl;
+      DLOG(INFO) << "send project idea request to worker " << info.tag << "worker num: " << mstate.worker_num << endl;
 #endif
 
       return;
@@ -461,6 +469,7 @@ void clear_project_idea_queue() {
       Request_msg request_msg = mstate.project_idea_queue.front();
       mstate.project_idea_queue.pop();
       info.processing_project_idea = true;
+      mstate.processing_project_idea_num++;
       worker_process_request(worker_handle, info, request_msg);
     }
   }
@@ -475,6 +484,7 @@ inline void worker_process_request(Worker_handle worker_handle,
   // send request
   send_request_to_worker(worker_handle, worker_req);
   info.remaining_slots--;
+  mstate.total_remaining_slots--;
   mstate.worker_info[worker_handle] = info;
 
 #ifdef DEBUG
@@ -568,13 +578,15 @@ void kill_worker() {
 #ifdef DEBUG
     DLOG(INFO) << "worker tag: " << info.tag << " remaining_slots: " << info.remaining_slots << endl;
 #endif
-    if (info.remaining_slots == info.max_slots) {
+    if (info.remaining_slots == info.max_slots &&
+            mstate.total_remaining_slots >= CLOSE_NUM) {
       it = mstate.workers.erase(it);
       mstate.worker_info.erase(worker_handle);
       kill_worker_node(worker_handle);
       mstate.worker_num--;
       DLOG(INFO) << "KILL worker " << info.tag <<  "!" << 
           "project idea num: " << mstate.processing_project_idea_num << endl;
+      mstate.total_remaining_slots -= info.max_slots;
     } else {
       ++it;
     }
@@ -597,7 +609,7 @@ void handle_tick() {
           && (!mstate.compute_intensive_queue.empty() 
           || !mstate.project_idea_queue.empty()
           || mstate.processing_project_idea_num == mstate.worker_num)) {
-     if (mstate.compute_intensive_queue.size() + mstate.project_idea_queue.size() + mstate.processing_project_idea_num >= 12) {
+     if (mstate.compute_intensive_queue.size() + mstate.project_idea_queue.size() >= THREAD_NUM / 2) {
        start_new_worker();
        start_new_worker();
      } else {
@@ -612,26 +624,6 @@ void handle_tick() {
 
   // kill worker if too many
   kill_worker();
-  /*
-  // kill node if its is free
-  vector<Worker_handle>::iterator it = mstate.workers.begin() + 1;
-  while (it != mstate.workers.end()) {
-    Worker_handle worker_handle = *it;
-    Info info = get_worker_info(worker_handle);
-#ifdef DEBUG
-    DLOG(INFO) << "worker tag: " << info.tag << " remaining_slots: " << info.remaining_slots << endl;
-#endif
-    if (info.remaining_slots == info.max_slots) {
-      it = mstate.workers.erase(it);
-      mstate.worker_info.erase(worker_handle);
-      kill_worker_node(worker_handle);
-      mstate.worker_num--;
-      DLOG(INFO) << "KILL worker " << info.tag <<  "!" << endl;
-    } else {
-      ++it;
-    }
-  }
-  */
 }
 
 inline Client_handle get_client_handle(int tag) {
