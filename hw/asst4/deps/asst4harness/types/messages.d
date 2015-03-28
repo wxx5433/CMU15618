@@ -112,8 +112,8 @@ objs/asst4harness/types/messages.o deps/asst4harness/types/messages.d : src/asst
  /opt/gcc/4.9.2/include/c++/4.9.2/bits/ostream.tcc \
  /opt/gcc/4.9.2/include/c++/4.9.2/bits/istream.tcc \
  /opt/gcc/4.9.2/include/c++/4.9.2/bits/sstream.tcc \
- /home/xiaoxiaw/asst4/hw/asst4/src/asst4include/server/messages.h \
- /home/xiaoxiaw/asst4/hw/asst4/src/asst4harness/types/types.h \
+ /home/xiaoxiaw/CMU15618/hw/asst4/src/asst4include/server/messages.h \
+ /home/xiaoxiaw/CMU15618/hw/asst4/src/asst4harness/types/types.h \
  /afs/cs/academic/class/15418-s13/public/include/boost/shared_ptr.hpp \
  /afs/cs/academic/class/15418-s13/public/include/boost/smart_ptr/shared_ptr.hpp \
  /afs/cs/academic/class/15418-s13/public/include/boost/config.hpp \

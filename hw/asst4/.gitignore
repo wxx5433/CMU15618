@@ -1,2 +1,6 @@
 latedays.qsub.*
 logs.*
+objs/*
+deps/*
+master
+worker

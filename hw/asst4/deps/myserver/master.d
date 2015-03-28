@@ -124,9 +124,6 @@ objs/myserver/master.o deps/myserver/master.d : src/myserver/master.cpp \
  /opt/gcc/4.9.2/include/c++/4.9.2/stdexcept \
  /opt/gcc/4.9.2/include/c++/4.9.2/bits/uses_allocator.h \
  /opt/gcc/4.9.2/include/c++/4.9.2/bits/stl_multimap.h \
- /opt/gcc/4.9.2/include/c++/4.9.2/list \
- /opt/gcc/4.9.2/include/c++/4.9.2/bits/stl_list.h \
- /opt/gcc/4.9.2/include/c++/4.9.2/bits/list.tcc \
  /opt/gcc/4.9.2/include/c++/4.9.2/queue \
  /opt/gcc/4.9.2/include/c++/4.9.2/deque \
  /opt/gcc/4.9.2/include/c++/4.9.2/bits/stl_deque.h \
@@ -134,5 +131,11 @@ objs/myserver/master.o deps/myserver/master.d : src/myserver/master.cpp \
  /opt/gcc/4.9.2/include/c++/4.9.2/bits/stl_heap.h \
  /opt/gcc/4.9.2/include/c++/4.9.2/bits/stl_queue.h \
  /opt/gcc/4.9.2/include/c++/4.9.2/iostream \
- /home/xiaoxiaw/asst4/hw/asst4/src/asst4include/server/messages.h \
- /home/xiaoxiaw/asst4/hw/asst4/src/asst4include/server/master.h
+ /opt/gcc/4.9.2/include/c++/4.9.2/climits \
+ /opt/gcc/4.9.2/lib/gcc/x86_64-unknown-linux-gnu/4.9.2/include-fixed/limits.h \
+ /opt/gcc/4.9.2/lib/gcc/x86_64-unknown-linux-gnu/4.9.2/include-fixed/syslimits.h \
+ /usr/include/limits.h /usr/include/bits/posix1_lim.h \
+ /usr/include/bits/local_lim.h /usr/include/linux/limits.h \
+ /usr/include/bits/posix2_lim.h /usr/include/bits/xopen_lim.h \
+ /home/xiaoxiaw/CMU15618/hw/asst4/src/asst4include/server/messages.h \
+ /home/xiaoxiaw/CMU15618/hw/asst4/src/asst4include/server/master.h

@@ -467,8 +467,8 @@ objs/asst4harness/comm/comm.o deps/asst4harness/comm/comm.d : src/asst4harness/c
  /usr/include/asm/socket.h /usr/include/asm-generic/socket.h \
  /usr/include/asm/sockios.h /usr/include/asm-generic/sockios.h \
  /usr/include/string.h \
- /home/xiaoxiaw/asst4/hw/asst4/src/asst4harness/comm/comm.h \
- /home/xiaoxiaw/asst4/hw/asst4/src/asst4harness/types/types.h \
+ /home/xiaoxiaw/CMU15618/hw/asst4/src/asst4harness/comm/comm.h \
+ /home/xiaoxiaw/CMU15618/hw/asst4/src/asst4harness/types/types.h \
  /afs/cs/academic/class/15418-s13/public/include/boost/shared_ptr.hpp \
  /opt/gcc/4.9.2/include/c++/4.9.2/iostream \
  /opt/gcc/4.9.2/include/c++/4.9.2/ostream \

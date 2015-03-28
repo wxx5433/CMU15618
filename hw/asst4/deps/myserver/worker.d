@@ -114,7 +114,7 @@ objs/myserver/worker.o deps/myserver/worker.d : src/myserver/worker.cpp /usr/inc
  /afs/cs/academic/class/15418-s13/public/include/gflags/gflags_declare.h \
  /afs/cs/academic/class/15418-s13/public/include/glog/log_severity.h \
  /afs/cs/academic/class/15418-s13/public/include/glog/vlog_is_on.h \
- /home/xiaoxiaw/asst4/hw/asst4/src/asst4include/server/messages.h \
+ /home/xiaoxiaw/CMU15618/hw/asst4/src/asst4include/server/messages.h \
  /opt/gcc/4.9.2/include/c++/4.9.2/map \
  /opt/gcc/4.9.2/include/c++/4.9.2/bits/stl_tree.h \
  /opt/gcc/4.9.2/include/c++/4.9.2/ext/aligned_buffer.h \
@@ -126,7 +126,7 @@ objs/myserver/worker.o deps/myserver/worker.d : src/myserver/worker.cpp /usr/inc
  /opt/gcc/4.9.2/include/c++/4.9.2/stdexcept \
  /opt/gcc/4.9.2/include/c++/4.9.2/bits/uses_allocator.h \
  /opt/gcc/4.9.2/include/c++/4.9.2/bits/stl_multimap.h \
- /home/xiaoxiaw/asst4/hw/asst4/src/asst4include/server/worker.h \
- /home/xiaoxiaw/asst4/hw/asst4/src/asst4include/tools/cycle_timer.h \
+ /home/xiaoxiaw/CMU15618/hw/asst4/src/asst4include/server/worker.h \
+ /home/xiaoxiaw/CMU15618/hw/asst4/src/asst4include/tools/cycle_timer.h \
  /usr/include/sys/time.h \
- /home/xiaoxiaw/asst4/hw/asst4/src/asst4include/tools/work_queue.h
+ /home/xiaoxiaw/CMU15618/hw/asst4/src/asst4include/tools/work_queue.h

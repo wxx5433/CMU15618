@@ -16,9 +16,10 @@
 using namespace std;
 
 const int THREAD_NUM = 30;
-const double THRESHOLD = 1.3;
+const double THRESHOLD = 1.5;
 const double CLOSE_THRESHOLD = 1.3;
 const int CLOSE_NUM= static_cast<int>(THREAD_NUM * THRESHOLD * CLOSE_THRESHOLD);
+const int PROJECT_IDEA_COST = 5;
 
 typedef struct {
     int max_slots;
@@ -85,7 +86,7 @@ static struct Master_state {
 
 inline Info get_worker_info(Worker_handle);
 inline Client_handle get_client_handle(int tag);
-inline void worker_process_request(Worker_handle, Info&, const Request_msg&);
+inline void worker_process_request(Worker_handle, Info&, const Request_msg&, bool flag = false);
 
 bool check_cache(Client_handle, const Request_msg&);
 void start_new_worker();
@@ -243,11 +244,14 @@ void handle_worker_response(Worker_handle worker_handle, const Response_msg& res
     DLOG(INFO) << "receive project idea response" << endl;
     info.processing_project_idea = false;
     mstate.processing_project_idea_num--;
+    info.remaining_slots += PROJECT_IDEA_COST;
+    mstate.total_remaining_slots += PROJECT_IDEA_COST;
     // try to fetch another project idea
     clear_project_idea_queue();
+  } else {
+    ++info.remaining_slots;
+    ++mstate.total_remaining_slots;
   }
-  ++info.remaining_slots;
-  ++mstate.total_remaining_slots;
 #ifdef DEBUG
   DLOG(INFO) << "add slot, worker " << info.tag<< " remaining slots: " << info.remaining_slots << endl;
 #endif
@@ -410,7 +414,7 @@ void process_project_idea_request(const Request_msg& request_msg) {
     if (!info.processing_project_idea) {
       info.processing_project_idea = true;
       mstate.processing_project_idea_num++;
-      worker_process_request(worker_handle, info, request_msg); 
+      worker_process_request(worker_handle, info, request_msg, true); 
 #ifdef DEBUG 
       DLOG(INFO) << "send project idea request to worker " << info.tag << "worker num: " << mstate.worker_num << endl;
 #endif
@@ -480,11 +484,16 @@ void clear_project_idea_queue() {
  * Return the number of pending request
  */
 inline void worker_process_request(Worker_handle worker_handle, 
-        Info& info, const Request_msg& worker_req) {
+        Info& info, const Request_msg& worker_req, bool flag) {
   // send request
   send_request_to_worker(worker_handle, worker_req);
-  info.remaining_slots--;
-  mstate.total_remaining_slots--;
+  if (flag) {
+    info.remaining_slots -= PROJECT_IDEA_COST;
+    mstate.total_remaining_slots -= PROJECT_IDEA_COST;
+  } else {
+    info.remaining_slots--;
+    mstate.total_remaining_slots--;
+  }
   mstate.worker_info[worker_handle] = info;
 
 #ifdef DEBUG
