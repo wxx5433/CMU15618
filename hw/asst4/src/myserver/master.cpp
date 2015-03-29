@@ -16,9 +16,8 @@
 using namespace std;
 
 const int THREAD_NUM = 30;
-const double THRESHOLD = 1.5;
-const double CLOSE_THRESHOLD = 1.3;
-const int CLOSE_NUM= static_cast<int>(THREAD_NUM * THRESHOLD * CLOSE_THRESHOLD);
+const double THRESHOLD = 1.4;
+const int CLOSE_NUM = static_cast<int>(THREAD_NUM * THRESHOLD * THRESHOLD);
 const int PROJECT_IDEA_COST = 5;
 
 typedef struct {
@@ -89,7 +88,7 @@ inline Client_handle get_client_handle(int tag);
 inline void worker_process_request(Worker_handle, Info&, const Request_msg&, bool flag = false);
 
 bool check_cache(Client_handle, const Request_msg&);
-void start_new_worker();
+void start_new_worker(int num = 1);
 void update_cache(int, const Response_msg&);
 void process_request(const Request_msg&);
 void process_compute_intensive_request(const Request_msg&);
@@ -129,14 +128,20 @@ void master_node_init(int max_workers, int& tick_period) {
 /*
  * Start a new worker node
  */
-void start_new_worker() {
+void start_new_worker(int num) {
   if (!mstate.starting_worker 
           && mstate.worker_num < mstate.max_num_workers) {
-    int tag = mstate.next_tag++;
-    Request_msg req(tag);
-    req.set_arg("tag", "" + tag);
-    mstate.starting_worker = true;
-    request_new_worker_node(req);
+    num = min(mstate.max_num_workers - mstate.worker_num, num);
+#ifdef DEBUG
+    DLOG(INFO) << "Lets start " << num << "workers" << endl;
+#endif
+    for (int i = 0; i < num; ++i) {
+      int tag = mstate.next_tag++;
+      Request_msg req(tag);
+      req.set_arg("tag", "" + tag);
+      mstate.starting_worker = true;
+      request_new_worker_node(req);
+    }
   }
 }
 
@@ -149,10 +154,14 @@ void start_new_worker() {
 void handle_new_worker_online(Worker_handle worker_handle, int tag) {
   Info info;
   
-  if (tag == 0) {  // set first worker as special one
-    info.max_slots = 35;
-  } else {
-    info.max_slots = static_cast<int>(THREAD_NUM * THRESHOLD);
+  info.max_slots = static_cast<int>(THREAD_NUM * THRESHOLD);
+  if (tag != 0) {  // set first worker as special one
+    // for better load balancing
+    Worker_handle prev_worker_handle = mstate.workers[mstate.worker_num - 1];
+    Info prev_info = get_worker_info(prev_worker_handle);
+    mstate.total_remaining_slots -= (prev_info.max_slots - THREAD_NUM);
+    prev_info.max_slots = THREAD_NUM;
+    mstate.worker_info[prev_worker_handle] = prev_info;
   }
   info.remaining_slots = info.max_slots;
   info.tag = tag;
@@ -617,10 +626,10 @@ void handle_tick() {
   if (mstate.worker_num < mstate.max_num_workers 
           && (!mstate.compute_intensive_queue.empty() 
           || !mstate.project_idea_queue.empty()
-          || mstate.processing_project_idea_num == mstate.worker_num)) {
-     if (mstate.compute_intensive_queue.size() + mstate.project_idea_queue.size() >= THREAD_NUM / 2) {
-       start_new_worker();
-       start_new_worker();
+          || mstate.processing_project_idea_num == mstate.worker_num
+          || mstate.total_remaining_slots <= 10)) {
+     if (mstate.compute_intensive_queue.size() >= THREAD_NUM / 2) {
+       start_new_worker(2);
      } else {
        start_new_worker();
      }
